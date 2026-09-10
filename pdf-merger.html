@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bates — Merge PDFs</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root{
+    --bg: #eef2f8;
+    --surface: #ffffff;
+    --ink: #0f1e33;
+    --blue: #2454e0;
+    --blue-hover: #1a41bd;
+    --blue-deep: #0b2a6b;
+    --blue-pale: #e9f0fd;
+    --blue-pale-2: #dbe6fb;
+    --line: #dbe3f0;
+    --muted: #64748b;
+    --radius: 4px;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-font-smoothing: antialiased; }
+
+  body{
+    margin:0;
+    background: var(--bg);
+    background-image:
+      radial-gradient(ellipse 1000px 500px at 10% -15%, rgba(36,84,224,0.07), transparent 55%),
+      radial-gradient(ellipse 800px 500px at 100% 0%, rgba(11,42,107,0.05), transparent 55%);
+    color: var(--ink);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+  }
+
+  a { color: inherit; }
+
+  .wrap{
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 56px 24px 80px;
+  }
+
+  /* ---------- Header ---------- */
+  header{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap: 32px;
+    padding-bottom: 36px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 40px;
+    flex-wrap: wrap;
+  }
+
+  .eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--blue);
+    margin: 0 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .eyebrow::before{
+    content: '';
+    width: 7px; height: 7px;
+    background: var(--blue);
+    border-radius: 1px;
+    display: inline-block;
+  }
+
+  h1{
+    font-family:'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: clamp(32px, 5vw, 46px);
+    line-height: 1.08;
+    margin: 0 0 16px;
+    max-width: 12ch;
+    letter-spacing: -0.015em;
+    color: var(--blue-deep);
+  }
+
+  header p{
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.6;
+    max-width: 40ch;
+    margin: 0;
+  }
+
+  .privacy-note{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--blue-deep);
+    background: var(--blue-pale);
+    border: 1px solid var(--blue-pale-2);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    max-width: 220px;
+    line-height: 1.5;
+    flex-shrink: 0;
+  }
+
+  /* ---------- Drop zone ---------- */
+  .dropzone{
+    position: relative;
+    border: 1.5px dashed #b9c8e8;
+    border-radius: 8px;
+    padding: 46px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+    background: var(--surface);
+    display: block;
+  }
+  .dropzone:hover, .dropzone:focus-visible{
+    border-color: var(--blue);
+    background: var(--blue-pale);
+  }
+  .dropzone.dragover{
+    border-color: var(--blue);
+    background: var(--blue-pale);
+  }
+  .dropzone input{ display:none; }
+
+  .dz-icon{
+    width: 44px; height: 44px;
+    margin: 0 auto 18px;
+    position: relative;
+  }
+  .dz-icon svg{ width: 100%; height: 100%; }
+
+  .dz-title{
+    font-family:'Space Grotesk', sans-serif;
+    font-size: 19px;
+    font-weight: 600;
+    margin: 0 0 6px;
+    color: var(--blue-deep);
+  }
+  .dz-sub{
+    font-size: 13px;
+    color: var(--muted);
+    margin: 0;
+  }
+  .dz-sub b{ color: var(--ink); font-weight: 500; }
+
+  /* ---------- File stack ---------- */
+  .stack-section{
+    margin-top: 40px;
+  }
+
+  .stack-header{
+    display:flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+
+  .stack-title{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .stack-title span{ color: var(--blue-deep); }
+
+  .clear-btn{
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-family: 'Inter', sans-serif;
+    font-size: 12.5px;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    padding: 4px;
+  }
+  .clear-btn:hover{ color: var(--blue); }
+
+  #file-list{
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .file-card{
+    display:flex;
+    align-items:center;
+    gap: 14px;
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    cursor: grab;
+    position: relative;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease, border-color 0.12s ease;
+  }
+  .file-card:hover{ border-color: #c3d2ef; }
+  .file-card:active{ cursor: grabbing; }
+  .file-card.dragging{
+    opacity: 0.4;
+  }
+  .file-card.drag-over-top{ box-shadow: 0 -3px 0 var(--blue); }
+  .file-card.drag-over-bottom{ box-shadow: 0 3px 0 var(--blue); }
+
+  .index-stamp{
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 500;
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    padding: 4px 7px;
+    border-radius: 3px;
+    border: 1px solid var(--blue-pale-2);
+    background: var(--blue-pale);
+    color: var(--blue-deep);
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .index-stamp::before{ content: 'No. '; opacity: 0.55; }
+
+  .grip{
+    color: #c3ccdb;
+    font-size: 14px;
+    letter-spacing: 2px;
+    flex-shrink: 0;
+    user-select: none;
+  }
+
+  .file-meta{ flex: 1; min-width: 0; }
+  .file-name{
+    font-size: 13.5px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .file-sub{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .file-actions{ display:flex; gap: 4px; flex-shrink: 0; }
+  .icon-btn{
+    background: none;
+    border: none;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    display:flex; align-items:center; justify-content:center;
+    color: #9aa7bb;
+    cursor: pointer;
+    font-size: 15px;
+  }
+  .icon-btn:hover{ background: var(--blue-pale); color: var(--blue); }
+  .icon-btn.move:hover{ color: var(--blue-deep); }
+  .icon-btn:disabled{ opacity: 0.3; cursor: default; }
+  .icon-btn:disabled:hover{ background: none; color: #9aa7bb; }
+
+  .empty-hint{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    color: var(--muted);
+    text-align: center;
+    padding: 20px 0 6px;
+  }
+
+  /* ---------- Merge action ---------- */
+  .merge-bar{
+    margin-top: 32px;
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  .totals{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+  .totals b{ color: var(--blue-deep); font-weight: 500; }
+
+  .stamp-btn{
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 15.5px;
+    letter-spacing: 0.01em;
+    color: #ffffff;
+    background: var(--blue);
+    border: none;
+    border-radius: var(--radius);
+    padding: 14px 30px;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.1s ease;
+  }
+  .stamp-btn:hover:not(:disabled){ background: var(--blue-hover); }
+  .stamp-btn:active:not(:disabled){ transform: translateY(1px); }
+  .stamp-btn:disabled{
+    background: #dbe3f0;
+    color: #9aa7bb;
+    cursor: not-allowed;
+  }
+
+  .result{
+    margin-top: 28px;
+    border: 1px solid var(--blue-pale-2);
+    border-radius: 8px;
+    padding: 22px 24px;
+    display: none;
+    align-items: center;
+    gap: 20px;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    background: var(--blue-pale);
+  }
+  .result.show{ display:flex; }
+
+  .result-left{ display:flex; align-items:center; gap: 16px; }
+
+  .stamp-mark{
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 500;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: var(--blue);
+    border: 1.5px solid var(--blue);
+    border-radius: 3px;
+    padding: 6px 9px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+    background: var(--surface);
+  }
+
+  .result-text b{ display:block; font-family:'Space Grotesk', sans-serif; font-size: 16px; font-weight: 600; color: var(--blue-deep); }
+  .result-text span{ font-family:'IBM Plex Mono', monospace; font-size: 12px; color: var(--muted); }
+
+  .download-btn{
+    font-family: 'Inter', sans-serif;
+    font-weight: 500;
+    font-size: 14px;
+    color: #ffffff;
+    background: var(--blue-deep);
+    border: none;
+    border-radius: var(--radius);
+    padding: 11px 22px;
+    cursor: pointer;
+    text-decoration: none;
+    display:inline-block;
+  }
+  .download-btn:hover{ background: #081f4f; }
+
+  .status-line{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--blue);
+    margin-top: 10px;
+    min-height: 16px;
+  }
+
+  footer{
+    margin-top: 60px;
+    padding-top: 24px;
+    border-top: 1px solid var(--line);
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 11.5px;
+    color: var(--muted);
+    display:flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  @media (max-width: 640px){
+    header{ flex-direction: column; }
+    .privacy-note{ max-width: none; }
+    .file-card{ padding: 10px 12px; }
+    .grip{ display: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    * { transition: none !important; animation: none !important; }
+  }
+
+  [hidden]{ display: none !important; }
+</style>
+</head>
+<body>
+
+<a href="index.html" style="position:fixed;top:16px;left:16px;z-index:999;display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.04em;color:#64748b;text-decoration:none;background:#ffffff;border:1px solid #dbe3f0;padding:7px 12px;border-radius:3px;">&larr; The Bindery</a>
+
+<div class="wrap">
+
+  <header>
+    <div>
+      <p class="eyebrow">Document Assembly</p>
+      <h1>Merge your PDFs into one file.</h1>
+      <p>Drop in any number of PDFs, set the order, and combine them into a single document.</p>
+    </div>
+    <div class="privacy-note">
+      Everything happens in your browser. Files are never uploaded anywhere.
+    </div>
+  </header>
+
+  <label class="dropzone" id="dropzone" tabindex="0">
+    <div class="dz-icon">
+      <svg viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="9" y="4" width="22" height="30" rx="2" fill="#E9F0FD" stroke="#2454E0" stroke-width="1.5"/>
+        <rect x="13" y="10" width="26" height="30" rx="2" fill="#FFFFFF" stroke="#2454E0" stroke-width="1.5"/>
+        <line x1="18" y1="18" x2="34" y2="18" stroke="#B9C8E8" stroke-width="1.5"/>
+        <line x1="18" y1="24" x2="34" y2="24" stroke="#B9C8E8" stroke-width="1.5"/>
+        <line x1="18" y1="30" x2="28" y2="30" stroke="#B9C8E8" stroke-width="1.5"/>
+      </svg>
+    </div>
+    <p class="dz-title">Drop PDFs here, or click to browse</p>
+    <p class="dz-sub">Add <b>as many as you like</b> — you'll set the order next</p>
+    <input type="file" id="file-input" accept="application/pdf" multiple>
+  </label>
+
+  <div class="stack-section">
+    <div class="stack-header">
+      <p class="stack-title">Assembly order <span id="count-label">(0 files)</span></p>
+      <button class="clear-btn" id="clear-btn" hidden>Clear all</button>
+    </div>
+    <ul id="file-list"></ul>
+    <p class="empty-hint" id="empty-hint">No files added yet — the order you drop them in becomes the order they're merged.</p>
+  </div>
+
+  <div class="merge-bar">
+    <p class="totals" id="totals"></p>
+    <button class="stamp-btn" id="merge-btn" disabled>Merge PDFs</button>
+  </div>
+  <p class="status-line" id="status-line"></p>
+
+  <div class="result" id="result">
+    <div class="result-left">
+      <span class="stamp-mark">Merged</span>
+      <div class="result-text">
+        <b id="result-name">merged.pdf</b>
+        <span id="result-meta"></span>
+      </div>
+    </div>
+    <a class="download-btn" id="download-btn" download>Download PDF</a>
+  </div>
+
+  <footer>
+    <span>Runs entirely client-side via pdf-lib</span>
+    <span>No files stored, ever.</span>
+  </footer>
+
+</div>
+
+<script>
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('file-input');
+const fileListEl = document.getElementById('file-list');
+const countLabel = document.getElementById('count-label');
+const emptyHint = document.getElementById('empty-hint');
+const clearBtn = document.getElementById('clear-btn');
+const mergeBtn = document.getElementById('merge-btn');
+const totalsEl = document.getElementById('totals');
+const statusLine = document.getElementById('status-line');
+const resultEl = document.getElementById('result');
+const resultName = document.getElementById('result-name');
+const resultMeta = document.getElementById('result-meta');
+const downloadBtn = document.getElementById('download-btn');
+
+// Each entry: { id, file, pageCount, sizeLabel }
+let files = [];
+let idCounter = 0;
+let dragSrcId = null;
+
+function formatSize(bytes){
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024*1024) return (bytes/1024).toFixed(0) + ' KB';
+  return (bytes/(1024*1024)).toFixed(1) + ' MB';
+}
+
+function padIndex(n){
+  return String(n).padStart(3, '0');
+}
+
+async function addFiles(fileArray){
+  const pdfFiles = fileArray.filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+  for (const file of pdfFiles){
+    const id = 'f' + (idCounter++);
+    const entry = { id, file, pageCount: null, sizeLabel: formatSize(file.size) };
+    files.push(entry);
+    render();
+    try {
+      const bytes = await file.arrayBuffer();
+      const doc = await PDFLib.PDFDocument.load(bytes, { ignoreEncryption: true });
+      entry.pageCount = doc.getPageCount();
+    } catch (e) {
+      entry.pageCount = '?';
+      entry.error = true;
+    }
+    render();
+  }
+}
+
+function removeFile(id){
+  files = files.filter(f => f.id !== id);
+  render();
+}
+
+function moveFile(id, dir){
+  const i = files.findIndex(f => f.id === id);
+  const j = i + dir;
+  if (j < 0 || j >= files.length) return;
+  [files[i], files[j]] = [files[j], files[i]];
+  render();
+}
+
+function render(){
+  fileListEl.innerHTML = '';
+  countLabel.textContent = `(${files.length} file${files.length === 1 ? '' : 's'})`;
+  emptyHint.hidden = files.length > 0;
+  clearBtn.hidden = files.length === 0;
+  mergeBtn.disabled = files.length < 2;
+
+  const totalPages = files.reduce((sum, f) => sum + (typeof f.pageCount === 'number' ? f.pageCount : 0), 0);
+  const totalSize = files.reduce((sum, f) => sum + f.file.size, 0);
+  totalsEl.innerHTML = files.length
+    ? `<b>${totalPages}</b> page${totalPages === 1 ? '' : 's'} total · ${formatSize(totalSize)}`
+    : '';
+
+  files.forEach((f, i) => {
+    const li = document.createElement('li');
+    li.className = 'file-card';
+    li.draggable = true;
+    li.dataset.id = f.id;
+
+    li.innerHTML = `
+      <span class="index-stamp">${padIndex(i + 1)}</span>
+      <span class="grip">⠿</span>
+      <div class="file-meta">
+        <div class="file-name">${escapeHtml(f.file.name)}</div>
+        <div class="file-sub">${f.error ? 'Could not read page count' : (f.pageCount === null ? 'Reading…' : f.pageCount + ' page' + (f.pageCount === 1 ? '' : 's'))} · ${f.sizeLabel}</div>
+      </div>
+      <div class="file-actions">
+        <button class="icon-btn move" data-action="up" data-id="${f.id}" title="Move up" ${i === 0 ? 'disabled' : ''}>↑</button>
+        <button class="icon-btn move" data-action="down" data-id="${f.id}" title="Move down" ${i === files.length - 1 ? 'disabled' : ''}>↓</button>
+        <button class="icon-btn" data-action="remove" data-id="${f.id}" title="Remove">✕</button>
+      </div>
+    `;
+    fileListEl.appendChild(li);
+  });
+
+  resultEl.classList.remove('show');
+  statusLine.textContent = '';
+}
+
+function escapeHtml(str){
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+fileListEl.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-action]');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  const action = btn.dataset.action;
+  if (action === 'remove') removeFile(id);
+  if (action === 'up') moveFile(id, -1);
+  if (action === 'down') moveFile(id, 1);
+});
+
+clearBtn.addEventListener('click', () => { files = []; render(); });
+
+// --- Drag and drop reordering ---
+fileListEl.addEventListener('dragstart', (e) => {
+  const card = e.target.closest('.file-card');
+  if (!card) return;
+  dragSrcId = card.dataset.id;
+  card.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+});
+
+fileListEl.addEventListener('dragend', (e) => {
+  const card = e.target.closest('.file-card');
+  if (card) card.classList.remove('dragging');
+  document.querySelectorAll('.file-card').forEach(c => c.classList.remove('drag-over-top','drag-over-bottom'));
+});
+
+fileListEl.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  const card = e.target.closest('.file-card');
+  if (!card || card.dataset.id === dragSrcId) return;
+  const rect = card.getBoundingClientRect();
+  const isTop = (e.clientY - rect.top) < rect.height / 2;
+  document.querySelectorAll('.file-card').forEach(c => c.classList.remove('drag-over-top','drag-over-bottom'));
+  card.classList.add(isTop ? 'drag-over-top' : 'drag-over-bottom');
+});
+
+fileListEl.addEventListener('drop', (e) => {
+  e.preventDefault();
+  const card = e.target.closest('.file-card');
+  if (!card || !dragSrcId || card.dataset.id === dragSrcId) return;
+  const rect = card.getBoundingClientRect();
+  const isTop = (e.clientY - rect.top) < rect.height / 2;
+
+  const srcIndex = files.findIndex(f => f.id === dragSrcId);
+  let targetIndex = files.findIndex(f => f.id === card.dataset.id);
+  const [moved] = files.splice(srcIndex, 1);
+  if (srcIndex < targetIndex && isTop) targetIndex -= 1;
+  targetIndex = isTop ? targetIndex : targetIndex + 1;
+  files.splice(targetIndex, 0, moved);
+  dragSrcId = null;
+  render();
+});
+
+// --- File input / drop zone ---
+dropzone.addEventListener('click', (e) => {
+  if (e.target !== fileInput) fileInput.click();
+});
+dropzone.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
+});
+fileInput.addEventListener('change', (e) => {
+  addFiles(Array.from(e.target.files));
+  fileInput.value = '';
+});
+['dragenter','dragover'].forEach(evt => {
+  dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+});
+['dragleave','drop'].forEach(evt => {
+  dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.remove('dragover'); });
+});
+dropzone.addEventListener('drop', (e) => {
+  const dropped = Array.from(e.dataTransfer.files);
+  addFiles(dropped);
+});
+
+// --- Merge ---
+mergeBtn.addEventListener('click', async () => {
+  if (files.length < 2) return;
+  mergeBtn.disabled = true;
+  statusLine.textContent = 'Merging…';
+  resultEl.classList.remove('show');
+
+  try {
+    const mergedPdf = await PDFLib.PDFDocument.create();
+    for (const f of files) {
+      const bytes = await f.file.arrayBuffer();
+      const srcDoc = await PDFLib.PDFDocument.load(bytes, { ignoreEncryption: true });
+      const pages = await mergedPdf.copyPages(srcDoc, srcDoc.getPageIndices());
+      pages.forEach(p => mergedPdf.addPage(p));
+    }
+    const mergedBytes = await mergedPdf.save();
+    const blob = new Blob([mergedBytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+
+    downloadBtn.href = url;
+    downloadBtn.download = 'merged.pdf';
+    resultName.textContent = 'merged.pdf';
+    resultMeta.textContent = `${mergedPdf.getPageCount()} pages · ${formatSize(blob.size)} · ${files.length} files combined`;
+    resultEl.classList.add('show');
+    statusLine.textContent = '';
+  } catch (err) {
+    statusLine.textContent = 'Something went wrong reading one of the PDFs — try removing it and merging again.';
+    console.error(err);
+  } finally {
+    mergeBtn.disabled = files.length < 2;
+  }
+});
+
+render();
+</script>
+
+</body>
+</html>

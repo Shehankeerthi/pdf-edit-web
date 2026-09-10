@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Presswork — convert documents, images &amp; PDFs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<!-- Libraries (cdnjs) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<style>
+  :root{
+    --bg: #eef2f8;
+    --surface: #ffffff;
+    --surface-2: #f4f7fc;
+    --ink: #0f1e33;
+    --muted: #64748b;
+    --blue: #2454e0;
+    --blue-hover: #1a41bd;
+    --blue-deep: #0b2a6b;
+    --blue-pale: #e9f0fd;
+    --blue-pale-2: #dbe6fb;
+    --line: #dbe3f0;
+    --radius: 4px;
+  }
+
+  *{ box-sizing:border-box; }
+
+  html,body{
+    margin:0; padding:0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family:'Inter', sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  body{
+    background-image:
+      radial-gradient(ellipse 1000px 500px at 10% -15%, rgba(36,84,224,0.07), transparent 55%),
+      radial-gradient(ellipse 800px 500px at 100% 0%, rgba(11,42,107,0.05), transparent 55%);
+  }
+
+  a{ color:var(--blue); }
+
+  .page{
+    max-width:1100px;
+    margin:0 auto;
+    padding: 56px 24px 80px;
+  }
+
+  /* ---------- Header ---------- */
+  .eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color: var(--blue);
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:18px;
+  }
+  .eyebrow::before{
+    content:"";
+    width:7px; height:7px;
+    background: var(--blue);
+    border-radius:1px;
+    display:inline-block;
+  }
+
+  h1{
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:600;
+    font-size: clamp(34px, 5vw, 58px);
+    line-height:1.04;
+    letter-spacing:-0.015em;
+    margin: 0 0 18px;
+    max-width: 14ch;
+    color: var(--blue-deep);
+  }
+  h1 em{
+    font-style:normal;
+    color: var(--blue);
+  }
+
+  .tagline{
+    font-size:17px;
+    line-height:1.6;
+    color: var(--muted);
+    max-width: 52ch;
+    margin: 0 0 44px;
+  }
+
+  /* ---------- Layout ---------- */
+  main{
+    display:grid;
+    grid-template-columns: 1.55fr 1fr;
+    gap: 28px;
+    align-items:start;
+  }
+  @media (max-width: 860px){
+    main{ grid-template-columns: 1fr; }
+  }
+
+  section.press, aside.manifest{
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 28px;
+  }
+
+  /* ---------- Press bed / dropzone ---------- */
+  .press-bed{
+    position:relative;
+    background: var(--blue-pale);
+    background-image:
+      repeating-linear-gradient(0deg, rgba(15,30,51,0.03) 0px, rgba(15,30,51,0.03) 1px, transparent 1px, transparent 26px);
+    color: var(--ink);
+    border-radius: 2px;
+    border: 1.5px dashed var(--blue-pale-2);
+    padding: 46px 24px;
+    min-height: 220px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    gap: 10px;
+    cursor:pointer;
+    transition: border-color .15s ease, background-color .15s ease, transform .08s ease;
+  }
+  .press-bed:hover, .press-bed:focus-visible{
+    border-color: var(--blue);
+    outline: none;
+  }
+  .press-bed.dragover{
+    border-color: var(--blue);
+    background: var(--blue-pale-2);
+    transform: scale(0.995);
+  }
+  .press-bed .glyph{
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:700;
+    font-size:15px;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    color: var(--blue);
+  }
+  .press-bed .instructions{
+    font-size:14.5px;
+    color:#3b4a63;
+  }
+  .press-bed .instructions b{ color:var(--ink); }
+  .press-bed .fineprint{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11.5px;
+    color:#6b7a94;
+    margin-top:6px;
+  }
+  #fileElem{ display:none; }
+
+  /* ---------- File ticket ---------- */
+  .ticket{
+    margin-top: 20px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:14px;
+    background: var(--blue-pale);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+  }
+  .ticket.hidden, .stamps.hidden, .lever.hidden, #status.hidden{ display:none; }
+  .ticket-name{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:13.5px;
+    color: var(--ink);
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .ticket-meta{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11.5px;
+    color: var(--muted);
+    margin-top:3px;
+  }
+  .badge{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10.5px;
+    letter-spacing:.05em;
+    text-transform:uppercase;
+    color: #ffffff;
+    background: var(--blue);
+    padding: 4px 8px;
+    border-radius: 2px;
+    white-space:nowrap;
+  }
+
+  /* ---------- Stamp / format choices ---------- */
+  .stamps{
+    margin-top: 22px;
+  }
+  .stamps .label{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11.5px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color: var(--muted);
+    margin-bottom:10px;
+  }
+  .stamp-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  .stamp-btn{
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:600;
+    font-size:14.5px;
+    color: var(--ink);
+    background: transparent;
+    border: 1.5px solid var(--line);
+    border-radius: 2px;
+    padding: 11px 18px;
+    cursor:pointer;
+    transition: border-color .12s ease, color .12s ease, background-color .12s ease;
+  }
+  .stamp-btn:hover{ border-color: var(--blue); color: var(--blue); }
+  .stamp-btn.selected{
+    border-color: var(--blue);
+    background: var(--blue-pale);
+    color: var(--blue);
+  }
+  .stamp-btn:focus-visible{ outline: 2px solid var(--blue); outline-offset:2px; }
+
+  /* ---------- Lever / convert button ---------- */
+  .lever{
+    margin-top: 24px;
+    display:flex;
+    align-items:center;
+    gap:16px;
+  }
+  .lever-btn{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:13px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color: #ffffff;
+    background: linear-gradient(180deg, var(--blue), var(--blue-hover));
+    border: none;
+    border-radius: 2px;
+    padding: 14px 26px;
+    cursor:pointer;
+    transition: transform .08s ease, box-shadow .08s ease;
+    box-shadow: 0 2px 0 var(--blue-deep);
+  }
+  .lever-btn:hover:not(:disabled){ transform: translateY(1px); box-shadow: 0 1px 0 var(--blue-deep); }
+  .lever-btn:active:not(:disabled){ transform: translateY(2px); box-shadow: none; }
+  .lever-btn:disabled{ opacity:.55; cursor:default; }
+  .lever-btn:focus-visible{ outline: 2px solid var(--blue-deep); outline-offset:2px; }
+
+  .stamp-mark{
+    width: 30px; height:30px;
+    border-radius:50%;
+    border: 2px solid var(--blue);
+    display:flex; align-items:center; justify-content:center;
+    flex-shrink:0;
+  }
+  .stamp-mark::after{
+    content:"";
+    width:10px; height:10px;
+    border-radius:50%;
+    background: var(--blue);
+  }
+  @media (prefers-reduced-motion: no-preference){
+    .stamp-mark.pressing{ animation: press-down .5s ease; }
+  }
+  @keyframes press-down{
+    0%{ transform: translateY(-10px) scale(.9); opacity:.4; }
+    55%{ transform: translateY(2px) scale(1.08); opacity:1; }
+    100%{ transform: translateY(0) scale(1); opacity:1; }
+  }
+
+  #status{
+    margin-top:16px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:13px;
+    color: var(--muted);
+  }
+  #status.error{ color: #c0392b; }
+  #status.ok{ color: var(--blue); }
+
+  /* ---------- Manifest / job log ---------- */
+  .manifest h2{
+    font-family:'Space Grotesk', sans-serif;
+    font-size:19px;
+    font-weight:600;
+    margin: 0 0 4px;
+    color: var(--blue-deep);
+  }
+  .manifest .sub{
+    font-size:13px;
+    color: var(--muted);
+    margin: 0 0 18px;
+  }
+  #manifestList{
+    list-style:none;
+    margin:0; padding:0;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .manifest-empty{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12.5px;
+    color: var(--muted);
+    border: 1px dashed var(--line);
+    border-radius: 2px;
+    padding: 16px;
+    text-align:center;
+  }
+  .ticket-stub{
+    background: var(--blue-pale);
+    color: var(--ink);
+    border-radius: 2px;
+    padding: 12px 14px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    position:relative;
+    overflow:hidden;
+  }
+  .ticket-stub::before{
+    content:"";
+    position:absolute;
+    left:0; top:0; bottom:0;
+    width:4px;
+    background: var(--blue);
+  }
+  @media (prefers-reduced-motion: no-preference){
+    .ticket-stub.entering{ animation: slide-in .32s ease; }
+  }
+  @keyframes slide-in{
+    from{ transform: translateX(14px); opacity:0; }
+    to{ transform: translateX(0); opacity:1; }
+  }
+  .ticket-stub .stub-info{ overflow:hidden; }
+  .ticket-stub .stub-title{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12.5px;
+    font-weight:500;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .ticket-stub .stub-sub{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10.5px;
+    color:#5b6b85;
+    margin-top:2px;
+  }
+  .stub-dl{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    color: #ffffff;
+    background: var(--blue);
+    padding: 6px 10px;
+    border-radius: 2px;
+    text-decoration:none;
+    white-space:nowrap;
+    flex-shrink:0;
+  }
+  .stub-dl:hover{ background: var(--blue-hover); }
+
+  footer{
+    margin-top: 48px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11.5px;
+    color: var(--muted);
+    text-align:center;
+  }
+</style>
+</head>
+<body>
+
+<a href="index.html" style="position:fixed;top:16px;left:16px;z-index:999;display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.04em;color:#64748b;text-decoration:none;background:#ffffff;border:1px solid #dbe3f0;padding:7px 12px;border-radius:3px;">&larr; The Bindery</a>
+
+<div class="page">
+
+  <div class="eyebrow">Presswork — No. 01</div>
+  <h1>Feed it paper,<br>pull out <em>something new</em>.</h1>
+  <p class="tagline">Drop a Word document, image, text file, or PDF onto the bed. Choose what it should become. Pull the lever. Everything runs right here in your browser — nothing you upload leaves this page.</p>
+
+  <main>
+    <section class="press">
+
+      <div class="press-bed" id="dropzone" role="button" tabindex="0" aria-label="Upload a file to convert">
+        <div class="glyph" id="bedGlyph">Set the type</div>
+        <div class="instructions"><b>Drop a file here</b>, or click to browse</div>
+        <div class="fineprint">.docx · .txt · .png / .jpg / .gif / .webp · .pdf</div>
+      </div>
+      <input type="file" id="fileElem" accept=".docx,.txt,.pdf,.png,.jpg,.jpeg,.gif,.webp">
+
+      <div class="ticket hidden" id="fileInfo">
+        <div>
+          <div class="ticket-name" id="fileName">—</div>
+          <div class="ticket-meta" id="fileMeta">—</div>
+        </div>
+        <div class="badge" id="fileBadge">—</div>
+      </div>
+
+      <div class="stamps hidden" id="formatChoices">
+        <div class="label">Convert to</div>
+        <div class="stamp-row" id="stampRow"></div>
+      </div>
+
+      <div class="lever hidden" id="leverWrap">
+        <div class="stamp-mark" id="stampMark" aria-hidden="true"></div>
+        <button class="lever-btn" id="convertBtn">Pull the press</button>
+      </div>
+
+      <div id="status" class="hidden" role="status" aria-live="polite"></div>
+    </section>
+
+    <aside class="manifest">
+      <h2>Job manifest</h2>
+      <p class="sub">Finished conversions from this session.</p>
+      <ol id="manifestList">
+        <li class="manifest-empty">No jobs pulled yet.</li>
+      </ol>
+    </aside>
+  </main>
+
+  <footer>Runs entirely client-side · docx via Mammoth · pdf via pdf.js · output via jsPDF / JSZip</footer>
+</div>
+
+<script>
+(function(){
+  // pdf.js worker
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+
+  const TYPE_MAP = {
+    docx: { label: 'Word document', badge: 'DOCX', targets: [{ext:'pdf', label:'PDF'}] },
+    txt:  { label: 'Plain text',    badge: 'TXT',  targets: [{ext:'pdf', label:'PDF'}] },
+    png:  { label: 'PNG image',     badge: 'PNG',  targets: [{ext:'pdf', label:'PDF'}] },
+    jpg:  { label: 'JPEG image',    badge: 'JPG',  targets: [{ext:'pdf', label:'PDF'}] },
+    jpeg: { label: 'JPEG image',    badge: 'JPEG', targets: [{ext:'pdf', label:'PDF'}] },
+    gif:  { label: 'GIF image',     badge: 'GIF',  targets: [{ext:'pdf', label:'PDF'}] },
+    webp: { label: 'WebP image',    badge: 'WEBP', targets: [{ext:'pdf', label:'PDF'}] },
+    pdf:  { label: 'PDF document',  badge: 'PDF',  targets: [
+              {ext:'txt', label:'Text (.txt)'},
+              {ext:'png', label:'Images (.png)'},
+              {ext:'docx', label:'Word (.docx)'}
+           ] }
+  };
+
+  const dropzone = document.getElementById('dropzone');
+  const fileElem = document.getElementById('fileElem');
+  const bedGlyph = document.getElementById('bedGlyph');
+  const fileInfo = document.getElementById('fileInfo');
+  const fileName = document.getElementById('fileName');
+  const fileMeta = document.getElementById('fileMeta');
+  const fileBadge = document.getElementById('fileBadge');
+  const formatChoices = document.getElementById('formatChoices');
+  const stampRow = document.getElementById('stampRow');
+  const leverWrap = document.getElementById('leverWrap');
+  const convertBtn = document.getElementById('convertBtn');
+  const stampMark = document.getElementById('stampMark');
+  const statusEl = document.getElementById('status');
+  const manifestList = document.getElementById('manifestList');
+
+  let currentFile = null;
+  let currentExt = null;
+  let selectedTarget = null;
+
+  function extOf(name){
+    const m = /\.([a-z0-9]+)$/i.exec(name || '');
+    return m ? m[1].toLowerCase() : '';
+  }
+  function humanSize(bytes){
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+    return (bytes/(1024*1024)).toFixed(1) + ' MB';
+  }
+  function setStatus(msg, kind){
+    statusEl.textContent = msg;
+    statusEl.classList.remove('hidden','error','ok');
+    if (kind) statusEl.classList.add(kind);
+  }
+  function clearStatus(){
+    statusEl.classList.add('hidden');
+    statusEl.textContent = '';
+  }
+
+  dropzone.addEventListener('click', () => fileElem.click());
+  dropzone.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileElem.click(); }
+  });
+  ['dragenter','dragover'].forEach(evt =>
+    dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.add('dragover'); })
+  );
+  ['dragleave','drop'].forEach(evt =>
+    dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.remove('dragover'); })
+  );
+  dropzone.addEventListener('drop', (e) => {
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  });
+  fileElem.addEventListener('change', (e) => {
+    const f = e.target.files[0];
+    if (f) handleFile(f);
+  });
+
+  function handleFile(file){
+    const ext = extOf(file.name);
+    const info = TYPE_MAP[ext];
+    clearStatus();
+
+    if (!info){
+      currentFile = null; currentExt = null;
+      fileInfo.classList.add('hidden');
+      formatChoices.classList.add('hidden');
+      leverWrap.classList.add('hidden');
+      bedGlyph.textContent = 'Set the type';
+      setStatus('That format isn\u2019t on the press yet. Try .docx, .txt, an image, or a .pdf.', 'error');
+      return;
+    }
+
+    currentFile = file;
+    currentExt = ext;
+    selectedTarget = null;
+
+    bedGlyph.textContent = info.label;
+    fileName.textContent = file.name;
+    fileMeta.textContent = humanSize(file.size) + (file.size > 25*1024*1024 ? ' \u00b7 large file, this may take a moment' : '');
+    fileBadge.textContent = info.badge;
+    fileInfo.classList.remove('hidden');
+
+    stampRow.innerHTML = '';
+    info.targets.forEach((t, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'stamp-btn';
+      btn.type = 'button';
+      btn.textContent = '\u2192 ' + t.label;
+      btn.addEventListener('click', () => {
+        selectedTarget = t.ext;
+        [...stampRow.children].forEach(c => c.classList.remove('selected'));
+        btn.classList.add('selected');
+        leverWrap.classList.remove('hidden');
+        clearStatus();
+      });
+      stampRow.appendChild(btn);
+      if (info.targets.length === 1 && i === 0){ btn.click(); }
+    });
+    formatChoices.classList.remove('hidden');
+  }
+
+  convertBtn.addEventListener('click', async () => {
+    if (!currentFile || !selectedTarget) return;
+    convertBtn.disabled = true;
+    stampMark.classList.remove('pressing'); void stampMark.offsetWidth; stampMark.classList.add('pressing');
+    setStatus('Pressing \u2014 converting ' + currentExt.toUpperCase() + ' to ' + selectedTarget.toUpperCase() + '\u2026');
+
+    try{
+      const key = currentExt + '->' + selectedTarget;
+      let result;
+      switch(key){
+        case 'docx->pdf': result = await docxToPdf(currentFile); break;
+        case 'txt->pdf':  result = await txtToPdf(currentFile); break;
+        case 'png->pdf':
+        case 'jpg->pdf':
+        case 'jpeg->pdf':
+        case 'gif->pdf':
+        case 'webp->pdf': result = await imageToPdf(currentFile); break;
+        case 'pdf->txt':  result = await pdfToText(currentFile); break;
+        case 'pdf->png':  result = await pdfToImages(currentFile); break;
+        case 'pdf->docx': result = await pdfToDocx(currentFile); break;
+        default: throw new Error('No press die for that conversion yet.');
+      }
+      addManifestEntry(result.filename, result.blob, currentFile.name);
+      setStatus('Done \u2014 ' + result.filename + ' is in the manifest.', 'ok');
+    }catch(err){
+      console.error(err);
+      setStatus('The press jammed: ' + (err && err.message ? err.message : 'something went wrong.'), 'error');
+    }finally{
+      convertBtn.disabled = false;
+    }
+  });
+
+  function baseName(name){
+    return name.replace(/\.[^.]+$/, '');
+  }
+
+  function addManifestEntry(outFilename, blob, sourceName){
+    const empty = manifestList.querySelector('.manifest-empty');
+    if (empty) empty.remove();
+
+    const url = URL.createObjectURL(blob);
+    const li = document.createElement('li');
+    li.className = 'ticket-stub entering';
+    li.innerHTML = `
+      <div class="stub-info">
+        <div class="stub-title">${outFilename}</div>
+        <div class="stub-sub">from ${sourceName}</div>
+      </div>
+      <a class="stub-dl" href="${url}" download="${outFilename}">Download</a>
+    `;
+    manifestList.prepend(li);
+  }
+
+  /* ---------------- Conversions ---------------- */
+
+  function readAsArrayBuffer(file){
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.onerror = () => rej(new Error('Could not read the file.'));
+      r.readAsArrayBuffer(file);
+    });
+  }
+  function readAsText(file){
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.onerror = () => rej(new Error('Could not read the file.'));
+      r.readAsText(file);
+    });
+  }
+  function readAsDataURL(file){
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.onerror = () => rej(new Error('Could not read the file.'));
+      r.readAsDataURL(file);
+    });
+  }
+
+  async function docxToPdf(file){
+    const buf = await readAsArrayBuffer(file);
+    const { value: html } = await mammoth.convertToHtml({ arrayBuffer: buf });
+
+    if (!html || !html.replace(/<[^>]+>/g, '').trim()){
+      throw new Error('No readable text found in that document.');
+    }
+
+    // Render off-screen (html2canvas reconstructs from the DOM, so this
+    // works fine outside the viewport) then rasterize with html2canvas
+    // directly — far more reliable than jsPDF's built-in .html() bridge,
+    // which can silently fail and leave you with a blank page.
+    const container = document.createElement('div');
+    container.style.cssText = 'position:absolute; top:0; left:-99999px; width:700px; padding:32px; background:#ffffff; color:#111; font-family:Georgia,serif; font-size:14px; line-height:1.6;';
+    container.innerHTML = html;
+    document.body.appendChild(container);
+
+    // let fonts/layout settle before rasterizing
+    await new Promise(r => setTimeout(r, 80));
+
+    let canvas;
+    try{
+      canvas = await html2canvas(container, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+    } finally {
+      document.body.removeChild(container);
+    }
+
+    if (!canvas || canvas.width === 0 || canvas.height === 0){
+      throw new Error('Could not render that document to a page.');
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 24;
+    const imgWidth = pageWidth - margin * 2;
+    const pxPerPt = canvas.width / imgWidth;
+    const sliceHeightPx = Math.floor((pageHeight - margin * 2) * pxPerPt);
+
+    let renderedPx = 0;
+    let first = true;
+    while (renderedPx < canvas.height){
+      const thisSliceHeightPx = Math.min(sliceHeightPx, canvas.height - renderedPx);
+      const sliceCanvas = document.createElement('canvas');
+      sliceCanvas.width = canvas.width;
+      sliceCanvas.height = thisSliceHeightPx;
+      sliceCanvas.getContext('2d').drawImage(
+        canvas, 0, renderedPx, canvas.width, thisSliceHeightPx,
+        0, 0, canvas.width, thisSliceHeightPx
+      );
+      const sliceDataUrl = sliceCanvas.toDataURL('image/png');
+      const sliceHeightPt = thisSliceHeightPx / pxPerPt;
+      if (!first) doc.addPage();
+      doc.addImage(sliceDataUrl, 'PNG', margin, margin, imgWidth, sliceHeightPt);
+      renderedPx += thisSliceHeightPx;
+      first = false;
+    }
+
+    const blob = doc.output('blob');
+    return { filename: baseName(file.name) + '.pdf', blob };
+  }
+
+  async function txtToPdf(file){
+    const text = await readAsText(file);
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const margin = 48;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const usableWidth = pageWidth - margin * 2;
+    doc.setFont('Courier', 'normal');
+    doc.setFontSize(11);
+    const lines = doc.splitTextToSize(text.replace(/\r\n/g, '\n'), usableWidth);
+    const lineHeight = 14;
+    let y = margin;
+    lines.forEach(line => {
+      if (y > pageHeight - margin){ doc.addPage(); y = margin; }
+      doc.text(line, margin, y);
+      y += lineHeight;
+    });
+    const blob = doc.output('blob');
+    return { filename: baseName(file.name) + '.pdf', blob };
+  }
+
+  function imageToPdf(file){
+    return readAsDataURL(file).then(dataUrl => {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          const { jsPDF } = window.jspdf;
+          const orientation = img.width > img.height ? 'landscape' : 'portrait';
+          const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation });
+          const pageWidth = doc.internal.pageSize.getWidth();
+          const pageHeight = doc.internal.pageSize.getHeight();
+          const margin = 24;
+          const maxW = pageWidth - margin * 2;
+          const maxH = pageHeight - margin * 2;
+          const ratio = Math.min(maxW / img.width, maxH / img.height);
+          const w = img.width * ratio;
+          const h = img.height * ratio;
+          const x = (pageWidth - w) / 2;
+          const y = (pageHeight - h) / 2;
+          const format = /png/i.test(file.type) ? 'PNG' : 'JPEG';
+          doc.addImage(dataUrl, format, x, y, w, h, undefined, 'FAST');
+          resolve({ filename: baseName(file.name) + '.pdf', blob: doc.output('blob') });
+        };
+        img.onerror = () => reject(new Error('Could not load that image.'));
+        img.src = dataUrl;
+      });
+    });
+  }
+
+  async function loadPdf(file){
+    const buf = await readAsArrayBuffer(file);
+    return pdfjsLib.getDocument({ data: buf }).promise;
+  }
+
+  async function pdfToText(file){
+    const pdf = await loadPdf(file);
+    let text = '';
+    for (let i = 1; i <= pdf.numPages; i++){
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const pageText = content.items.map(it => it.str).join(' ');
+      text += pageText + '\n\n';
+    }
+    if (!text.trim()){
+      throw new Error('No selectable text in that PDF — it looks like a scan or image, which needs OCR (not supported here).');
+    }
+    const blob = new Blob([text], { type: 'text/plain' });
+    return { filename: baseName(file.name) + '.txt', blob };
+  }
+
+  async function pdfToImages(file){
+    const pdf = await loadPdf(file);
+    const pageBlobs = [];
+    for (let i = 1; i <= pdf.numPages; i++){
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 2 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext('2d');
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+      pageBlobs.push(blob);
+    }
+    if (pageBlobs.length === 1){
+      return { filename: baseName(file.name) + '.png', blob: pageBlobs[0] };
+    }
+    const zip = new JSZip();
+    pageBlobs.forEach((b, i) => zip.file(`page-${String(i+1).padStart(2,'0')}.png`, b));
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    return { filename: baseName(file.name) + '-pages.zip', blob: zipBlob };
+  }
+
+  async function pdfToDocx(file){
+    const pdf = await loadPdf(file);
+    const paragraphs = [];
+    for (let i = 1; i <= pdf.numPages; i++){
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const pageText = content.items.map(it => it.str).join(' ');
+      pageText.split(/\n+/).forEach(p => { if (p.trim()) paragraphs.push(p.trim()); });
+      paragraphs.push('');
+    }
+    if (!paragraphs.some(p => p.trim())){
+      throw new Error('No selectable text in that PDF — it looks like a scan or image, which needs OCR (not supported here).');
+    }
+    const blob = await buildMinimalDocx(paragraphs);
+    return { filename: baseName(file.name) + '.docx', blob };
+  }
+
+  function xmlEscape(s){
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function buildMinimalDocx(paragraphs){
+    const bodyXml = paragraphs.map(p =>
+      `<w:p><w:r><w:t xml:space="preserve">${xmlEscape(p)}</w:t></w:r></w:p>`
+    ).join('');
+
+    const documentXml =
+`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>${bodyXml}<w:sectPr/></w:body>
+</w:document>`;
+
+    const contentTypesXml =
+`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`;
+
+    const relsXml =
+`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`;
+
+    const zip = new JSZip();
+    zip.file('[Content_Types].xml', contentTypesXml);
+    zip.folder('_rels').file('.rels', relsXml);
+    zip.folder('word').file('document.xml', documentXml);
+
+    return zip.generateAsync({
+      type: 'blob',
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    });
+  }
+
+})();
+</script>
+</body>
+</html>

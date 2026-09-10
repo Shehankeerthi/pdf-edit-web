@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Page Desk — edit PDF pages</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #eef2f8;
+    --bg-deep: #0b2a6b;
+    --paper: #ffffff;
+    --paper-edge: #dbe3f0;
+    --ink: #0f1e33;
+    --ink-soft: #64748b;
+    --accent: #2454e0;
+    --accent-soft: #1a41bd;
+    --gold: #2454e0;
+    --muted: #64748b;
+    --danger: #dc2626;
+    --danger-soft: #fde2e2;
+    --felt-line: rgba(36,84,224,0.045);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(ellipse at top left, rgba(36,84,224,0.06), transparent 60%),
+      repeating-linear-gradient(45deg, var(--felt-line) 0, var(--felt-line) 1px, transparent 1px, transparent 14px),
+      var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+  }
+  ::selection{ background: var(--accent); color: #ffffff; }
+
+  .app{
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 48px 28px 140px;
+  }
+
+  /* ---------- Hero ---------- */
+  .hero{
+    text-align: center;
+    margin-bottom: 40px;
+  }
+  .hero .eyebrow{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 14px;
+  }
+  .hero h1{
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: clamp(2.2rem, 5vw, 3.4rem);
+    margin: 0 0 12px;
+    letter-spacing: -0.01em;
+  }
+  .hero h1 em{
+    font-style: normal;
+    font-weight: 600;
+    color: var(--accent);
+  }
+  .hero p{
+    color: var(--muted);
+    font-size: 16px;
+    max-width: 480px;
+    margin: 0 auto;
+    line-height: 1.55;
+  }
+
+  /* ---------- Dropzone ---------- */
+  .dropzone{
+    margin: 36px auto 0;
+    max-width: 560px;
+    border: 1.5px dashed var(--paper-edge);
+    border-radius: 4px;
+    padding: 46px 30px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .18s ease, background .18s ease, transform .18s ease;
+    position: relative;
+  }
+  .dropzone:hover, .dropzone.drag{
+    border-color: var(--accent);
+    background: rgba(36,84,224,0.04);
+  }
+  .dropzone.drag{ transform: scale(1.01); }
+  .dropzone .clip{
+    width: 34px; height: 34px;
+    margin: 0 auto 16px;
+    color: var(--gold);
+  }
+  .dropzone strong{
+    display:block;
+    font-family:'Space Grotesk', sans-serif;
+    font-size: 19px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .dropzone span{
+    color: var(--muted);
+    font-size: 13.5px;
+  }
+  .dropzone input{ display:none; }
+
+  .error-msg{
+    max-width: 560px;
+    margin: 14px auto 0;
+    text-align: center;
+    color: var(--danger);
+    font-size: 13.5px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  /* ---------- Workspace ---------- */
+  #workspace[hidden]{ display:none; }
+
+  .doc-bar{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 8px 0 26px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--paper-edge);
+  }
+  .doc-bar .name{
+    font-family:'Space Grotesk', sans-serif;
+    font-size: 20px;
+    font-weight: 600;
+  }
+  .doc-bar .count{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    color: var(--muted);
+    letter-spacing: 0.03em;
+  }
+
+  .grid{
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 26px 20px;
+  }
+
+  .card{
+    position: relative;
+    background: var(--paper);
+    border-radius: 3px;
+    padding: 10px 10px 8px;
+    box-shadow: 0 10px 22px -10px rgba(0,0,0,0.55), 0 1px 0 rgba(255,255,255,0.04);
+    cursor: grab;
+    transition: transform .16s ease, box-shadow .16s ease, opacity .16s ease;
+    user-select: none;
+  }
+  .card:nth-child(3n+1){ transform: rotate(-0.6deg); }
+  .card:nth-child(3n+2){ transform: rotate(0.5deg); }
+  .card:nth-child(3n){ transform: rotate(-0.2deg); }
+  .card:hover{ box-shadow: 0 14px 26px -10px rgba(0,0,0,0.6); z-index: 2; }
+  .card.dragging{ opacity: 0.35; }
+  .card.drop-target{ outline: 2px dashed var(--gold); outline-offset: 3px; }
+
+  .card canvas, .card img{
+    display:block;
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--paper-edge);
+    background: #fff;
+  }
+
+  .card .num{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-soft);
+    margin-top: 7px;
+    text-align: center;
+    letter-spacing: 0.04em;
+  }
+
+  .card .del{
+    position:absolute;
+    top: -9px; right: -9px;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--ink);
+    color: var(--paper);
+    border: none;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    opacity: 0;
+    transform: scale(0.85);
+    transition: opacity .14s ease, transform .14s ease, background .14s ease;
+  }
+  .card:hover .del, .card:focus-within .del{ opacity: 1; transform: scale(1); }
+  .card .del:hover{ background: var(--accent); }
+  .card .del:focus-visible{ outline: 2px solid var(--accent-soft); outline-offset: 2px; opacity:1; transform:scale(1);}
+
+  .card.marked{ opacity: 0.5; }
+  .card .stamp{
+    position:absolute;
+    top: 38%;
+    left: 50%;
+    transform: translate(-50%,-50%) rotate(-16deg);
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 500;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    color: var(--danger);
+    border: 2px solid var(--danger);
+    border-radius: 4px;
+    padding: 3px 9px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .14s ease;
+  }
+  .card.marked .stamp{ opacity: 0.9; }
+
+  .card:focus-visible{ outline: 2px solid var(--gold); outline-offset: 3px; }
+
+  .insert-slot{
+    width: 100%;
+    height: 4px;
+  }
+
+  /* ---------- Toolbar ---------- */
+  .toolbar{
+    position: fixed;
+    left: 50%;
+    bottom: 26px;
+    transform: translateX(-50%);
+    display:flex;
+    align-items:center;
+    gap: 6px;
+    background: var(--bg-deep);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 999px;
+    padding: 8px 10px;
+    box-shadow: 0 16px 40px -12px rgba(0,0,0,0.65);
+    z-index: 20;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: calc(100vw - 32px);
+  }
+  .toolbar .status{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: rgba(255,255,255,0.7);
+    padding: 0 10px;
+    white-space: nowrap;
+  }
+  .toolbar button{
+    font-family: 'Inter', sans-serif;
+    font-size: 13.5px;
+    font-weight: 500;
+    border: none;
+    border-radius: 999px;
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease, opacity .15s ease;
+    white-space: nowrap;
+  }
+  .toolbar button:disabled{ opacity: 0.35; cursor: not-allowed; }
+  .btn-ghost{ background: transparent; color: var(--paper); }
+  .btn-ghost:hover:not(:disabled){ background: rgba(255,255,255,0.1); }
+  .btn-danger{ background: rgba(220,38,38,0.2); color: #f7b4b4; }
+  .btn-danger:hover:not(:disabled){ background: var(--danger); color: var(--paper); }
+  .btn-primary{ background: #ffffff; color: var(--bg-deep); font-weight: 600; }
+  .btn-primary:hover:not(:disabled){ background: #dbe6fb; }
+  .toolbar .divider{ width:1px; height:22px; background: rgba(255,255,255,0.16); margin: 0 2px; }
+  .toolbar button:focus-visible{ outline: 2px solid #ffffff; outline-offset: 2px; }
+
+  .empty-hint{
+    text-align:center;
+    color: var(--muted);
+    font-size: 13.5px;
+    padding: 40px 0;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  @media (max-width: 520px){
+    .toolbar{ gap: 4px; padding: 7px 8px; }
+    .toolbar .status{ width:100%; text-align:center; padding: 4px 0 0; order: 5; }
+    .grid{ grid-template-columns: repeat(auto-fill, minmax(120px,1fr)); gap: 20px 14px; }
+  }
+</style>
+</head>
+<body>
+
+<a href="index.html" style="position:fixed;top:16px;left:16px;z-index:999;display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.04em;color:#64748b;text-decoration:none;background:#ffffff;border:1px solid #dbe3f0;padding:7px 12px;border-radius:3px;">&larr; The Bindery</a>
+
+<div class="app">
+
+  <div class="hero" id="hero">
+    <div class="eyebrow">Page Desk</div>
+    <h1>Cut, keep, <em>reorder.</em></h1>
+    <p>Drop in a PDF. Click a page to mark it for removal, drag pages to reorder them, add more from another file — then download the result. Nothing leaves your browser.</p>
+
+    <label class="dropzone" id="dropzone" for="fileInput">
+      <svg class="clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14.5 10.5l-5 5a3 3 0 0 1-4.24-4.24l6.5-6.5a4.5 4.5 0 1 1 6.36 6.36l-6.5 6.5a2 2 0 1 1-2.83-2.83l5-5"/></svg>
+      <strong>Drop a PDF here, or click to choose one</strong>
+      <span>PDF files stay on this device — nothing is uploaded</span>
+      <input type="file" id="fileInput" accept="application/pdf">
+    </label>
+    <div class="error-msg" id="errorMsg" hidden></div>
+  </div>
+
+  <main id="workspace" hidden>
+    <div class="doc-bar">
+      <div class="name" id="docName">document.pdf</div>
+      <div class="count" id="docCount">0 pages</div>
+    </div>
+    <div class="grid" id="grid"></div>
+  </main>
+
+</div>
+
+<div class="toolbar" id="toolbar" hidden>
+  <span class="status" id="status">0 marked</span>
+  <div class="divider"></div>
+  <button class="btn-danger" id="removeBtn" disabled>Remove marked</button>
+  <div class="divider"></div>
+  <button class="btn-ghost" id="addBtn">Add pages</button>
+  <button class="btn-ghost" id="newBtn">Start over</button>
+  <div class="divider"></div>
+  <button class="btn-primary" id="downloadBtn">Download PDF</button>
+</div>
+<input type="file" id="addInput" accept="application/pdf" hidden>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const addInput = document.getElementById('addInput');
+const hero = document.getElementById('hero');
+const workspace = document.getElementById('workspace');
+const grid = document.getElementById('grid');
+const toolbar = document.getElementById('toolbar');
+const statusEl = document.getElementById('status');
+const removeBtn = document.getElementById('removeBtn');
+const addBtn = document.getElementById('addBtn');
+const newBtn = document.getElementById('newBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+const docNameEl = document.getElementById('docName');
+const docCountEl = document.getElementById('docCount');
+const errorMsg = document.getElementById('errorMsg');
+
+// sources: array of { bytes, pdfjsDoc }
+// pages: array of { id, sourceIndex, pageIndex (0-based in source), marked }
+let sources = [];
+let pages = [];
+let uid = 0;
+let baseName = 'document';
+let dragId = null;
+
+function showError(msg){
+  errorMsg.textContent = msg;
+  errorMsg.hidden = false;
+}
+function clearError(){ errorMsg.hidden = true; }
+
+async function loadPdfBytes(file){
+  const buf = await file.arrayBuffer();
+  return new Uint8Array(buf);
+}
+
+async function addSourceAndAppendPages(bytes, insertAtStart){
+  const sourceIndex = sources.length;
+  const loadingTask = pdfjsLib.getDocument({ data: bytes.slice() });
+  const pdfjsDoc = await loadingTask.promise;
+  sources.push({ bytes, pdfjsDoc });
+
+  const newPages = [];
+  for (let i = 0; i < pdfjsDoc.numPages; i++){
+    newPages.push({ id: uid++, sourceIndex, pageIndex: i, marked: false, dataUrl: null });
+  }
+  if (insertAtStart) pages = newPages.concat(pages);
+  else pages = pages.concat(newPages);
+
+  await renderThumbnails(newPages);
+}
+
+async function renderThumbnails(pageList){
+  for (const p of pageList){
+    const src = sources[p.sourceIndex];
+    const page = await src.pdfjsDoc.getPage(p.pageIndex + 1);
+    const viewport = page.getViewport({ scale: 1 });
+    const scale = 260 / viewport.width;
+    const scaledViewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = scaledViewport.width;
+    canvas.height = scaledViewport.height;
+    const ctx = canvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise;
+    p.dataUrl = canvas.toDataURL('image/png');
+  }
+}
+
+function renderGrid(){
+  grid.innerHTML = '';
+  if (pages.length === 0){
+    const hint = document.createElement('div');
+    hint.className = 'empty-hint';
+    hint.textContent = 'No pages left. Add pages, or start over.';
+    grid.appendChild(hint);
+  }
+  pages.forEach((p, idx) => {
+    const card = document.createElement('div');
+    card.className = 'card' + (p.marked ? ' marked' : '');
+    card.draggable = true;
+    card.tabIndex = 0;
+    card.dataset.id = p.id;
+
+    const img = document.createElement('img');
+    img.src = p.dataUrl;
+    img.alt = 'Page ' + (idx + 1);
+    card.appendChild(img);
+
+    const num = document.createElement('div');
+    num.className = 'num';
+    num.textContent = String(idx + 1).padStart(2, '0');
+    card.appendChild(num);
+
+    const del = document.createElement('button');
+    del.className = 'del';
+    del.type = 'button';
+    del.setAttribute('aria-label', 'Remove page ' + (idx + 1));
+    del.textContent = '\u00D7';
+    del.addEventListener('click', (e) => {
+      e.stopPropagation();
+      pages = pages.filter(pg => pg.id !== p.id);
+      renderGrid();
+    });
+    card.appendChild(del);
+
+    const stamp = document.createElement('div');
+    stamp.className = 'stamp';
+    stamp.textContent = 'REMOVE';
+    card.appendChild(stamp);
+
+    card.addEventListener('click', () => {
+      p.marked = !p.marked;
+      renderGrid();
+    });
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); p.marked = !p.marked; renderGrid(); }
+    });
+
+    card.addEventListener('dragstart', () => {
+      dragId = p.id;
+      requestAnimationFrame(() => card.classList.add('dragging'));
+    });
+    card.addEventListener('dragend', () => {
+      card.classList.remove('dragging');
+      document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target'));
+    });
+    card.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      card.classList.add('drop-target');
+    });
+    card.addEventListener('dragleave', () => card.classList.remove('drop-target'));
+    card.addEventListener('drop', (e) => {
+      e.preventDefault();
+      card.classList.remove('drop-target');
+      if (dragId === null || dragId === p.id) return;
+      const fromIdx = pages.findIndex(pg => pg.id === dragId);
+      const toIdx = pages.findIndex(pg => pg.id === p.id);
+      const [moved] = pages.splice(fromIdx, 1);
+      pages.splice(toIdx, 0, moved);
+      dragId = null;
+      renderGrid();
+    });
+
+    grid.appendChild(card);
+  });
+
+  const markedCount = pages.filter(p => p.marked).length;
+  statusEl.textContent = markedCount === 0
+    ? pages.length + (pages.length === 1 ? ' page' : ' pages')
+    : markedCount + ' marked for removal';
+  removeBtn.disabled = markedCount === 0;
+  downloadBtn.disabled = pages.length === 0;
+  docCountEl.textContent = pages.length + (pages.length === 1 ? ' page' : ' pages');
+}
+
+removeBtn.addEventListener('click', () => {
+  pages = pages.filter(p => !p.marked);
+  renderGrid();
+});
+
+addBtn.addEventListener('click', () => addInput.click());
+addInput.addEventListener('change', async () => {
+  const file = addInput.files[0];
+  if (!file) return;
+  try{
+    const bytes = await loadPdfBytes(file);
+    await addSourceAndAppendPages(bytes, false);
+    renderGrid();
+  } catch(err){
+    showError('Could not read that PDF. Try a different file.');
+  }
+  addInput.value = '';
+});
+
+newBtn.addEventListener('click', () => {
+  sources = [];
+  pages = [];
+  uid = 0;
+  workspace.hidden = true;
+  toolbar.hidden = true;
+  hero.hidden = false;
+  clearError();
+  fileInput.value = '';
+});
+
+downloadBtn.addEventListener('click', async () => {
+  if (pages.length === 0) return;
+  downloadBtn.disabled = true;
+  const prevLabel = downloadBtn.textContent;
+  downloadBtn.textContent = 'Building…';
+  try{
+    const outDoc = await PDFLib.PDFDocument.create();
+    const libDocs = [];
+    const copiedBySource = [];
+    for (let i = 0; i < sources.length; i++){
+      libDocs[i] = await PDFLib.PDFDocument.load(sources[i].bytes);
+      copiedBySource[i] = await outDoc.copyPages(libDocs[i], libDocs[i].getPageIndices());
+    }
+    for (const p of pages){
+      const copied = copiedBySource[p.sourceIndex][p.pageIndex];
+      outDoc.addPage(copied);
+    }
+    const outBytes = await outDoc.save();
+    const blob = new Blob([outBytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = baseName + '-edited.pdf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  } catch(err){
+    showError('Something went wrong building the PDF. Please try again.');
+  } finally {
+    downloadBtn.disabled = false;
+    downloadBtn.textContent = prevLabel;
+  }
+});
+
+async function handleInitialFile(file){
+  if (!file) return;
+  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')){
+    showError('That doesn\u2019t look like a PDF. Please choose a .pdf file.');
+    return;
+  }
+  clearError();
+  baseName = file.name.replace(/\.pdf$/i, '') || 'document';
+  docNameEl.textContent = file.name;
+  try{
+    const bytes = await loadPdfBytes(file);
+    await addSourceAndAppendPages(bytes, false);
+  } catch(err){
+    showError('Could not read that PDF. It may be corrupted or password protected.');
+    return;
+  }
+  hero.hidden = true;
+  workspace.hidden = false;
+  toolbar.hidden = false;
+  renderGrid();
+}
+
+fileInput.addEventListener('change', () => handleInitialFile(fileInput.files[0]));
+
+['dragenter','dragover'].forEach(evt => {
+  dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.add('drag'); });
+});
+['dragleave','drop'].forEach(evt => {
+  dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.remove('drag'); });
+});
+dropzone.addEventListener('drop', (e) => {
+  const file = e.dataTransfer.files[0];
+  handleInitialFile(file);
+});
+</script>
+
+</body>
+</html>

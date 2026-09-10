@@ -1,0 +1,1401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Annex — split, compress, sign, watermark &amp; more</title>
+<meta name="description" content="Ten more browser-based document tools: split, compress, sign, watermark, number, crop, repair, scan, and convert HTML or PDF to Markdown.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- Libraries (cdnjs) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+<style>
+  :root{
+    --bg: #eef2f8;
+    --surface: #ffffff;
+    --surface-2: #f4f7fc;
+    --line: #dbe3f0;
+    --ink: #0f1e33;
+    --muted: #64748b;
+    --blue: #2454e0;
+    --blue-hover: #1a41bd;
+    --blue-deep: #0b2a6b;
+    --blue-pale: #e9f0fd;
+    --blue-pale-2: #dbe6fb;
+    --danger: #dc2626;
+    --danger-soft: #fde2e2;
+    --ok: #0a7d4a;
+    --ok-soft: #e3f7ec;
+    --radius: 4px;
+  }
+  *{ box-sizing:border-box; }
+  html{ scroll-behavior:smooth; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background: var(--bg);
+    background-image:
+      radial-gradient(ellipse 1000px 500px at 10% -15%, rgba(36,84,224,0.07), transparent 55%),
+      radial-gradient(ellipse 800px 500px at 100% 0%, rgba(11,42,107,0.05), transparent 55%);
+    color: var(--ink);
+    font-family:'Inter', sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{ color: var(--blue); }
+  button{ font-family:inherit; }
+  ::selection{ background: var(--blue); color:#fff; }
+
+  .backlink{
+    position:fixed; top:16px; left:16px; z-index:999;
+    display:inline-flex; align-items:center; gap:6px;
+    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.04em;
+    color:var(--muted); text-decoration:none;
+    background:#ffffff; border:1px solid var(--line); padding:7px 12px; border-radius:3px;
+  }
+  .backlink:hover{ color: var(--blue); }
+
+  .page{
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 56px 24px 90px;
+  }
+
+  .eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    color: var(--blue);
+    display:flex; align-items:center; gap:10px;
+    margin-bottom:16px;
+  }
+  .eyebrow::before{ content:""; width:7px; height:7px; background:var(--blue); border-radius:1px; display:inline-block; }
+
+  h1{
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:600;
+    font-size: clamp(30px, 4.6vw, 46px);
+    line-height:1.08;
+    letter-spacing:-0.015em;
+    margin: 0 0 14px;
+    color: var(--blue-deep);
+  }
+  .tagline{
+    font-size:16px; line-height:1.6; color:var(--muted);
+    max-width: 60ch; margin: 0 0 40px;
+  }
+
+  /* ---------- Layout: nav + panel ---------- */
+  .shop{
+    display:grid;
+    grid-template-columns: 230px 1fr;
+    gap: 24px;
+    align-items:start;
+  }
+  @media (max-width: 860px){
+    .shop{ grid-template-columns: 1fr; }
+  }
+
+  .toolnav{
+    background: var(--surface);
+    border:1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 8px;
+    position: sticky;
+    top: 16px;
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+  }
+  @media (max-width: 860px){
+    .toolnav{
+      position:static;
+      flex-direction:row;
+      flex-wrap:wrap;
+    }
+  }
+  .toolnav button{
+    display:flex; align-items:center; gap:10px;
+    background:none; border:none; text-align:left;
+    padding:9px 10px;
+    font-family:'Inter',sans-serif; font-size:13.5px; font-weight:500;
+    color: var(--ink);
+    border-radius:3px;
+    cursor:pointer;
+    transition: background-color .12s ease, color .12s ease;
+  }
+  .toolnav button svg{ flex:none; width:17px; height:17px; color:var(--muted); transition:color .12s ease; }
+  .toolnav button:hover{ background: var(--blue-pale); }
+  .toolnav button.active{ background: var(--blue); color:#fff; }
+  .toolnav button.active svg{ color:#fff; }
+
+  .panel{
+    background: var(--surface);
+    border:1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 30px;
+    min-height: 420px;
+  }
+  .panel-head{ margin-bottom:22px; }
+  .panel-head .kicker{
+    font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--blue);
+    letter-spacing:.05em; margin:0 0 6px;
+  }
+  .panel-head h2{
+    font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:24px;
+    margin:0 0 8px; color:var(--blue-deep);
+  }
+  .panel-head p{ margin:0; color:var(--muted); font-size:14.5px; line-height:1.6; max-width:62ch; }
+
+  .tool-section{ display:none; }
+  .tool-section.active{ display:block; }
+
+  /* ---------- Dropzone ---------- */
+  .dz{
+    border: 1.5px dashed var(--line);
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    padding: 34px 20px;
+    text-align:center;
+    cursor:pointer;
+    transition: border-color .15s ease, background-color .15s ease;
+  }
+  .dz:hover, .dz.dragover{ border-color: var(--blue); background: var(--blue-pale); }
+  .dz .dz-title{ font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:15px; color:var(--blue-deep); margin-bottom:4px; }
+  .dz .dz-sub{ font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--muted); }
+
+  .file-ticket{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    background: var(--surface-2); border:1px solid var(--line); border-radius:var(--radius);
+    padding: 12px 16px; margin-top:14px;
+  }
+  .file-ticket .name{ font-weight:600; font-size:13.5px; }
+  .file-ticket .meta{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); margin-top:2px; }
+  .file-ticket .clear{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--danger);
+    background:none; border:1px solid var(--danger-soft); border-radius:3px; padding:5px 9px; cursor:pointer;
+  }
+  .file-ticket .clear:hover{ background: var(--danger-soft); }
+
+  /* ---------- Form controls ---------- */
+  .field{ margin-top:18px; }
+  .field label{
+    display:block; font-family:'IBM Plex Mono',monospace; font-size:11.5px;
+    letter-spacing:.03em; color:var(--muted); margin-bottom:7px; text-transform:uppercase;
+  }
+  .field input[type=text], .field input[type=number], .field textarea, .field select{
+    width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:3px;
+    font-family:'Inter',sans-serif; font-size:14px; color:var(--ink); background:#fff;
+  }
+  .field textarea{ resize:vertical; min-height:110px; font-family:'IBM Plex Mono',monospace; font-size:12.5px; line-height:1.6; }
+  .field input[type=range]{ width:100%; }
+  .row{ display:flex; gap:14px; flex-wrap:wrap; }
+  .row > .field{ flex:1; min-width:160px; }
+  .chip-group{ display:flex; gap:8px; flex-wrap:wrap; }
+  .chip{
+    padding:8px 13px; border:1px solid var(--line); border-radius:20px;
+    font-size:12.5px; background:#fff; cursor:pointer; color:var(--muted);
+    transition: all .12s ease;
+  }
+  .chip.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
+
+  .primary-btn{
+    margin-top:22px;
+    background: var(--blue); color:#fff; border:none;
+    padding: 13px 22px; border-radius:3px;
+    font-weight:600; font-size:14.5px; cursor:pointer;
+    display:inline-flex; align-items:center; gap:8px;
+    transition: background-color .15s ease, transform .1s ease;
+  }
+  .primary-btn:hover{ background: var(--blue-hover); }
+  .primary-btn:active{ transform: translateY(1px); }
+  .primary-btn:disabled{ background:#a9b8d6; cursor:not-allowed; }
+
+  .status{
+    margin-top:16px; padding:11px 14px; border-radius:3px;
+    font-family:'IBM Plex Mono',monospace; font-size:12.5px;
+  }
+  .status.ok{ background: var(--ok-soft); color: var(--ok); }
+  .status.err{ background: var(--danger-soft); color: var(--danger); }
+  .status.busy{ background: var(--blue-pale); color: var(--blue-deep); }
+  .hidden{ display:none !important; }
+
+  .dl-btn{
+    display:inline-flex; align-items:center; gap:8px;
+    margin-top:14px; background:var(--blue-deep); color:#fff; text-decoration:none;
+    padding:11px 18px; border-radius:3px; font-weight:600; font-size:13.5px;
+  }
+  .dl-btn:hover{ background:#08204f; }
+
+  /* thumbnails grid */
+  .thumbs{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr));
+    gap:10px; margin-top:18px; max-height:340px; overflow-y:auto;
+    padding:4px; border:1px solid var(--line); border-radius:3px; background:var(--surface-2);
+  }
+  .thumb{
+    position:relative; background:#fff; border:1.5px solid var(--line); border-radius:3px;
+    overflow:hidden; cursor:pointer; aspect-ratio:0.72;
+  }
+  .thumb canvas, .thumb img{ width:100%; height:100%; object-fit:contain; display:block; }
+  .thumb .n{
+    position:absolute; bottom:0; left:0; right:0; background:rgba(11,42,107,0.82); color:#fff;
+    font-family:'IBM Plex Mono',monospace; font-size:10px; text-align:center; padding:2px 0;
+  }
+  .thumb.sel{ border-color:var(--blue); box-shadow:0 0 0 2px var(--blue-pale-2); }
+  .thumb .check{
+    position:absolute; top:4px; right:4px; width:16px; height:16px; border-radius:50%;
+    background:#fff; border:1.5px solid var(--line); display:flex; align-items:center; justify-content:center;
+  }
+  .thumb.sel .check{ background:var(--blue); border-color:var(--blue); }
+  .thumb.sel .check::after{ content:"✓"; color:#fff; font-size:10px; }
+
+  .signpad-wrap{ margin-top:18px; }
+  #sigPad{
+    width:100%; height:160px; border:1.5px dashed var(--line); border-radius:3px;
+    background:#fff; touch-action:none; cursor:crosshair; display:block;
+  }
+  .signpad-actions{ display:flex; gap:10px; margin-top:8px; }
+  .ghost-btn{
+    background:none; border:1px solid var(--line); border-radius:3px; padding:7px 12px;
+    font-size:12px; color:var(--muted); cursor:pointer;
+  }
+  .ghost-btn:hover{ border-color:var(--blue); color:var(--blue); }
+
+  .place-canvas-wrap{ margin-top:16px; position:relative; display:inline-block; max-width:100%; }
+  .place-canvas-wrap canvas{ max-width:100%; border:1px solid var(--line); border-radius:3px; cursor:crosshair; }
+  .sig-preview{
+    position:absolute; border:1.5px dashed var(--blue); pointer-events:none; background:rgba(36,84,224,0.06);
+  }
+
+  .md-out{
+    margin-top:18px; width:100%; min-height:260px; font-family:'IBM Plex Mono',monospace;
+    font-size:12.5px; line-height:1.6; padding:14px; border:1px solid var(--line); border-radius:3px;
+    background:var(--surface-2); white-space:pre-wrap;
+  }
+
+  .note{
+    font-size:12.5px; color:var(--muted); margin-top:10px; line-height:1.6;
+  }
+
+  footer{
+    margin-top:46px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11.5px;
+    color: var(--muted);
+    text-align:center;
+  }
+</style>
+</head>
+<body>
+
+<a href="index.html" class="backlink">&larr; The Bindery</a>
+
+<div class="page">
+  <div class="eyebrow">The Annex — Stations 05–14</div>
+  <h1>Ten more tools for the odder jobs.</h1>
+  <p class="tagline">Splitting, compressing, signing, watermarking, numbering, cropping, repairing, scanning, and converting — all running on-device, same as the rest of the shop. Pick a tool from the list.</p>
+
+  <div class="shop">
+    <nav class="toolnav" id="toolnav">
+      <button data-tool="split" class="active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="7" height="18" rx="1"/><rect x="13" y="3" width="7" height="18" rx="1" stroke-dasharray="2 2"/><path d="M11.5 12h1"/></svg>
+        Split PDF
+      </button>
+      <button data-tool="compress">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2.5" width="16" height="19" rx="1.5"/><path d="M9 9l3 3-3 3M15 9l-3 3 3 3"/></svg>
+        Compress PDF
+      </button>
+      <button data-tool="watermark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2.5" width="16" height="19" rx="1.5"/><path d="M12 8c-2 2.4-2.6 3.7-2.6 5a2.6 2.6 0 0 0 5.2 0c0-1.3-.6-2.6-2.6-5z"/></svg>
+        Watermark
+      </button>
+      <button data-tool="sign">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2.5" width="16" height="19" rx="1.5"/><path d="M7 15.5c1-3 2-4 2.7-4 .8 0 .4 2.6 1.3 2.6.8 0 1.6-2.3 2.4-2.3.7 0 .4 1.7 1.6 1.7.8 0 1.3-.7 2-1.7"/></svg>
+        Sign PDF
+      </button>
+      <button data-tool="pagenum">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2.5" width="16" height="19" rx="1.5"/><text x="12" y="18" font-size="7" font-family="monospace" text-anchor="middle" fill="currentColor" stroke="none">1/3</text></svg>
+        Page numbers
+      </button>
+      <button data-tool="crop">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
+        Crop PDF
+      </button>
+      <button data-tool="html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2.5" width="16" height="19" rx="1.5"/><path d="M9.5 10l-2 2 2 2M14.5 10l2 2-2 2"/></svg>
+        HTML to PDF
+      </button>
+      <button data-tool="scan">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M4 16v2a2 2 0 0 0 2 2h2M20 8V6a2 2 0 0 0-2-2h-2M20 16v2a2 2 0 0 1-2 2h-2"/><circle cx="12" cy="12" r="3.2"/></svg>
+        Scan to PDF
+      </button>
+      <button data-tool="repair">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a3 3 0 0 0-4.1 3.6L4 16.5V20h3.5l6.6-6.6a3 3 0 0 0 3.6-4.1l-2.3 2.3-2-2z"/></svg>
+        Repair PDF
+      </button>
+      <button data-tool="md">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M6.5 15v-6l2.5 3 2.5-3v6M15.5 9v6M13 12.5l2.5 2.5 2.5-2.5"/></svg>
+        PDF to Markdown
+      </button>
+    </nav>
+
+    <div class="panel">
+
+      <!-- ============ SPLIT ============ -->
+      <section class="tool-section active" id="tool-split">
+        <div class="panel-head">
+          <p class="kicker">Station 05</p>
+          <h2>Split PDF</h2>
+          <p>Break a PDF into individual pages, or cut it into custom ranges. Everything is bundled into a zip for download.</p>
+        </div>
+        <div class="dz" id="split-dz">
+          <div class="dz-title">Drop a PDF here, or click to browse</div>
+          <div class="dz-sub">.pdf only</div>
+        </div>
+        <input type="file" id="split-file" accept=".pdf" class="hidden">
+        <div class="file-ticket hidden" id="split-ticket">
+          <div><div class="name" id="split-name">—</div><div class="meta" id="split-meta">—</div></div>
+          <button class="clear" id="split-clear">Remove</button>
+        </div>
+        <div class="field hidden" id="split-opts">
+          <div class="chip-group">
+            <span class="chip on" data-splitmode="each">Every page separate</span>
+            <span class="chip" data-splitmode="ranges">Custom ranges</span>
+          </div>
+          <div id="split-ranges-wrap" class="hidden" style="margin-top:14px;">
+            <label>Ranges (e.g. 1-3, 4, 7-9)</label>
+            <input type="text" id="split-ranges" placeholder="1-3, 4, 7-9">
+          </div>
+        </div>
+        <button class="primary-btn hidden" id="split-go">Split PDF</button>
+        <div class="status hidden" id="split-status"></div>
+      </section>
+
+      <!-- ============ COMPRESS ============ -->
+      <section class="tool-section" id="tool-compress">
+        <div class="panel-head">
+          <p class="kicker">Station 06</p>
+          <h2>Compress PDF</h2>
+          <p>Re-packs the PDF's internal structure to shrink file size. Works best on PDFs with lots of repeated objects and metadata; heavily-compressed image-based PDFs will shrink less.</p>
+        </div>
+        <div class="dz" id="compress-dz">
+          <div class="dz-title">Drop a PDF here, or click to browse</div>
+          <div class="dz-sub">.pdf only</div>
+        </div>
+        <input type="file" id="compress-file" accept=".pdf" class="hidden">
+        <div class="file-ticket hidden" id="compress-ticket">
+          <div><div class="name" id="compress-name">—</div><div class="meta" id="compress-meta">—</div></div>
+          <button class="clear" id="compress-clear">Remove</button>
+        </div>
+        <button class="primary-btn hidden" id="compress-go">Compress PDF</button>
+        <div class="status hidden" id="compress-status"></div>
+      </section>
+
+      <!-- ============ WATERMARK ============ -->
+      <section class="tool-section" id="tool-watermark">
+        <div class="panel-head">
+          <p class="kicker">Station 07</p>
+          <h2>Watermark</h2>
+          <p>Stamp text diagonally across every page — great for marking drafts or confidential copies.</p>
+        </div>
+        <div class="dz" id="watermark-dz">
+          <div class="dz-title">Drop a PDF here, or click to browse</div>
+          <div class="dz-sub">.pdf only</div>
+        </div>
+        <input type="file" id="watermark-file" accept=".pdf" class="hidden">
+        <div class="file-ticket hidden" id="watermark-ticket">
+          <div><div class="name" id="watermark-name">—</div><div class="meta" id="watermark-meta">—</div></div>
+          <button class="clear" id="watermark-clear">Remove</button>
+        </div>
+        <div class="field hidden" id="watermark-opts">
+          <label>Watermark text</label>
+          <input type="text" id="watermark-text" value="DRAFT" maxlength="40">
+          <div class="row">
+            <div class="field">
+              <label>Opacity (<span id="wm-op-val">30</span>%)</label>
+              <input type="range" id="watermark-opacity" min="5" max="80" value="30">
+            </div>
+            <div class="field">
+              <label>Size (<span id="wm-size-val">48</span>pt)</label>
+              <input type="range" id="watermark-size" min="16" max="100" value="48">
+            </div>
+          </div>
+          <label style="margin-top:14px;">Color</label>
+          <div class="chip-group">
+            <span class="chip on" data-wmcolor="#dc2626">Red</span>
+            <span class="chip" data-wmcolor="#2454e0">Blue</span>
+            <span class="chip" data-wmcolor="#0f1e33">Black</span>
+            <span class="chip" data-wmcolor="#0a7d4a">Green</span>
+          </div>
+        </div>
+        <button class="primary-btn hidden" id="watermark-go">Apply watermark</button>
+        <div class="status hidden" id="watermark-status"></div>
+      </section>
+
+      <!-- ============ SIGN ============ -->
+      <section class="tool-section" id="tool-sign">
+        <div class="panel-head">
+          <p class="kicker">Station 08</p>
+          <h2>Sign PDF</h2>
+          <p>Draw a signature, then click on the page where it should go.</p>
+        </div>
+        <div class="dz" id="sign-dz">
+          <div class="dz-title">Drop a PDF here, or click to browse</div>
+          <div class="dz-sub">.pdf only</div>
+        </div>
+        <input type="file" id="sign-file" accept=".pdf" class="hidden">
+        <div class="file-ticket hidden" id="sign-ticket">
+          <div><div class="name" id="sign-name">—</div><div class="meta" id="sign-meta">—</div></div>
+          <button class="clear" id="sign-clear">Remove</button>
+        </div>
+
+        <div class="hidden" id="sign-body">
+          <div class="signpad-wrap">
+            <label style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:7px;">1. Draw your signature</label>
+            <canvas id="sigPad"></canvas>
+            <div class="signpad-actions">
+              <button class="ghost-btn" id="sig-clear">Clear signature</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>2. Page to sign</label>
+            <select id="sign-page"></select>
+          </div>
+
+          <div class="field">
+            <label style="display:block;">3. Click on the page to place your signature</label>
+            <div class="place-canvas-wrap" id="sign-place-wrap">
+              <canvas id="sign-place-canvas"></canvas>
+              <div class="sig-preview hidden" id="sig-preview"></div>
+            </div>
+          </div>
+        </div>
+
+        <button class="primary-btn hidden" id="sign-go">Place signature &amp; download</button>
+        <div class="status hidden" id="sign-status"></div>
+      </section>
+
+      <!-- ============ PAGE NUMBERS ============ -->
+      <section class="tool-section" id="tool-pagenum">
+        <div class="panel-head">
+          <p class="kicker">Station 09</p>
+          <h2>Page numbers</h2>
+          <p>Stamp page numbers onto every page, in the corner or center of your choice.</p>
+        </div>
+        <div class="dz" id="pagenum-dz">
+          <div class="dz-title">Drop a PDF here, or click to browse</div>
+          <div class="dz-sub">.pdf only</div>
+        </div>
+        <input type="file" id="pagenum-file" accept=".pdf" class="hidden">
+        <div class="file-ticket hidden" id="pagenum-ticket">
+          <div><div class="name" id="pagenum-name">—</div><div class="meta" id="pagenum-meta">—</div></div>
+          <button class="clear" id="pagenum-clear">Remove</button>
+        </div>
+        <div class="field hidden" id="pagenum-opts">
+          <label>Position</label>
+          <div class="chip-group">
+            <span class="chip" data-pos="bl">Bottom left</span>
+            <span class="chip on" data-pos="bc">Bottom center</span>
+            <span class="chip" data-pos="br">Bottom right</span>
+            <span class="chip" data-pos="tc">Top center</span>
+          </div>
+          <div class="row" style="margin-top:14px;">
+            <div class="field">
+              <label>Format</label>
+              <select id="pagenum-format">
+                <option value="n">1, 2, 3…</option>
+                <option value="page-n" selected>Page 1, Page 2…</option>
+                <option value="n-of-N">1 of N</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Start at</label>
+              <input type="number" id="pagenum-start" value="1" min="0">
+            </div>
+          </div>
+        </div>
+        <button class="primary-btn hidden" id="pagenum-go">Add page numbers</button>
+        <div class="status hidden" id="pagenum-status"></div>
+      </section>
+
+      <!-- ============ CROP ============ -->
+      <section class="tool-section" id="tool-crop">
+        <div class="panel-head">
+          <p class="kicker">Station 10</p>
+          <h2>Crop PDF</h2>
+          <p>Trim margins off every page. Drag the sliders and watch the preview update, then apply to the whole document.</p>
+        </div>
+        <div class="dz" id="crop-dz">
+          <div class="dz-title">Drop a PDF here, or click to browse</div>
+          <div class="dz-sub">.pdf only</div>
+        </div>
+        <input type="file" id="crop-file" accept=".pdf" class="hidden">
+        <div class="file-ticket hidden" id="crop-ticket">
+          <div><div class="name" id="crop-name">—</div><div class="meta" id="crop-meta">—</div></div>
+          <button class="clear" id="crop-clear">Remove</button>
+        </div>
+        <div class="hidden" id="crop-body">
+          <div class="place-canvas-wrap" id="crop-canvas-wrap" style="display:block;">
+            <canvas id="crop-canvas"></canvas>
+            <div class="sig-preview" id="crop-box" style="border-color:var(--blue);"></div>
+          </div>
+          <div class="row" style="margin-top:16px;">
+            <div class="field"><label>Top (<span id="ct">0</span>%)</label><input type="range" id="crop-top" min="0" max="40" value="0"></div>
+            <div class="field"><label>Bottom (<span id="cb">0</span>%)</label><input type="range" id="crop-bottom" min="0" max="40" value="0"></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>Left (<span id="cl">0</span>%)</label><input type="range" id="crop-left" min="0" max="40" value="0"></div>
+            <div class="field"><label>Right (<span id="cr">0</span>%)</label><input type="range" id="crop-right" min="0" max="40" value="0"></div>
+          </div>
+        </div>
+        <button class="primary-btn hidden" id="crop-go">Crop all pages &amp; download</button>
+        <div class="status hidden" id="crop-status"></div>
+      </section>
+
+      <!-- ============ HTML TO PDF ============ -->
+      <section class="tool-section" id="tool-html">
+        <div class="panel-head">
+          <p class="kicker">Station 11</p>
+          <h2>HTML to PDF</h2>
+          <p>Paste HTML markup or plain text below. It's rendered exactly as written, then captured into a paginated PDF.</p>
+        </div>
+        <div class="field">
+          <label>HTML / text content</label>
+          <textarea id="html-input" placeholder="&lt;h1&gt;Hello&lt;/h1&gt;&#10;&lt;p&gt;Paste HTML here, or just plain text.&lt;/p&gt;">&lt;h1 style="font-family:sans-serif;color:#0b2a6b;"&gt;Sample document&lt;/h1&gt;
+&lt;p style="font-family:sans-serif;line-height:1.6;color:#0f1e33;"&gt;Replace this with your own HTML or plain text, then pull the lever below.&lt;/p&gt;</textarea>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>Page size</label>
+            <select id="html-size">
+              <option value="a4" selected>A4</option>
+              <option value="letter">Letter</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Content width</label>
+            <select id="html-width">
+              <option value="700" selected>700px</option>
+              <option value="900">900px</option>
+              <option value="540">540px (narrow)</option>
+            </select>
+          </div>
+        </div>
+        <button class="primary-btn" id="html-go">Render to PDF</button>
+        <div class="status hidden" id="html-status"></div>
+      </section>
+
+      <!-- ============ SCAN TO PDF ============ -->
+      <section class="tool-section" id="tool-scan">
+        <div class="panel-head">
+          <p class="kicker">Station 12</p>
+          <h2>Scan to PDF</h2>
+          <p>Use your device camera (or upload photos) to capture pages, arrange them in order, and bind them into a single PDF.</p>
+        </div>
+        <div class="row">
+          <button class="primary-btn" id="scan-camera-btn" style="margin-top:0;">Open camera</button>
+          <label class="primary-btn" style="margin-top:0;background:var(--blue-deep);" for="scan-file">Upload photos</label>
+        </div>
+        <input type="file" id="scan-file" accept="image/*" multiple class="hidden">
+        <div class="hidden" id="scan-camera-wrap" style="margin-top:16px;">
+          <video id="scan-video" autoplay playsinline style="width:100%;max-width:480px;border-radius:3px;border:1px solid var(--line);"></video>
+          <div style="margin-top:10px;display:flex;gap:10px;">
+            <button class="primary-btn" id="scan-capture-btn" style="margin-top:0;">Capture page</button>
+            <button class="ghost-btn" id="scan-camera-stop">Close camera</button>
+          </div>
+        </div>
+        <canvas id="scan-hidden-canvas" class="hidden"></canvas>
+        <div class="thumbs hidden" id="scan-thumbs"></div>
+        <p class="note hidden" id="scan-hint">Click a page to remove it. Pages are bound in the order shown.</p>
+        <button class="primary-btn hidden" id="scan-go">Bind captured pages into PDF</button>
+        <div class="status hidden" id="scan-status"></div>
+      </section>
+
+      <!-- ============ REPAIR ============ -->
+      <section class="tool-section" id="tool-repair">
+        <div class="panel-head">
+          <p class="kicker">Station 13</p>
+          <h2>Repair PDF</h2>
+          <p>For a PDF that won't open properly: this re-reads it page by page and rebuilds a clean file, dropping whatever structure was broken.</p>
+        </div>
+        <div class="dz" id="repair-dz">
+          <div class="dz-title">Drop a PDF here, or click to browse</div>
+          <div class="dz-sub">.pdf only</div>
+        </div>
+        <input type="file" id="repair-file" accept=".pdf" class="hidden">
+        <div class="file-ticket hidden" id="repair-ticket">
+          <div><div class="name" id="repair-name">—</div><div class="meta" id="repair-meta">—</div></div>
+          <button class="clear" id="repair-clear">Remove</button>
+        </div>
+        <button class="primary-btn hidden" id="repair-go">Attempt repair</button>
+        <div class="status hidden" id="repair-status"></div>
+      </section>
+
+      <!-- ============ PDF TO MARKDOWN ============ -->
+      <section class="tool-section" id="tool-md">
+        <div class="panel-head">
+          <p class="kicker">Station 14</p>
+          <h2>PDF to Markdown</h2>
+          <p>Pulls the text out of a PDF and guesses at headings from font size, giving you a Markdown file to drop into notes or a wiki.</p>
+        </div>
+        <div class="dz" id="md-dz">
+          <div class="dz-title">Drop a PDF here, or click to browse</div>
+          <div class="dz-sub">.pdf only</div>
+        </div>
+        <input type="file" id="md-file" accept=".pdf" class="hidden">
+        <div class="file-ticket hidden" id="md-ticket">
+          <div><div class="name" id="md-name">—</div><div class="meta" id="md-meta">—</div></div>
+          <button class="clear" id="md-clear">Remove</button>
+        </div>
+        <button class="primary-btn hidden" id="md-go">Convert to Markdown</button>
+        <div class="status hidden" id="md-status"></div>
+        <textarea class="md-out hidden" id="md-output" readonly></textarea>
+        <a class="dl-btn hidden" id="md-dl">Download .md</a>
+      </section>
+
+    </div>
+  </div>
+
+  <footer>Runs entirely client-side · pdf-lib · pdf.js · jsPDF · JSZip · html2canvas — nothing you feed in is uploaded to a server.</footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+  const { PDFDocument, rgb, degrees, StandardFonts } = window.PDFLib || {};
+
+  /* ---------- Nav / panel switching ---------- */
+  const navBtns = Array.from(document.querySelectorAll('#toolnav button'));
+  const sections = Array.from(document.querySelectorAll('.tool-section'));
+  function showTool(id){
+    navBtns.forEach(b => b.classList.toggle('active', b.dataset.tool === id));
+    sections.forEach(s => s.classList.toggle('active', s.id === 'tool-' + id));
+    history.replaceState(null, '', '#' + id);
+  }
+  navBtns.forEach(b => b.addEventListener('click', () => showTool(b.dataset.tool)));
+  const initial = (location.hash || '').replace('#','');
+  if (initial && navBtns.some(b => b.dataset.tool === initial)) showTool(initial);
+
+  /* ---------- Shared helpers ---------- */
+  function humanSize(bytes){
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+    return (bytes/(1024*1024)).toFixed(1) + ' MB';
+  }
+  function readArrayBuffer(file){
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = reject;
+      r.readAsArrayBuffer(file);
+    });
+  }
+  function downloadBlob(blob, filename){
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+  function setStatus(el, msg, kind){
+    el.textContent = msg;
+    el.classList.remove('hidden','ok','err','busy');
+    el.classList.add(kind || 'busy');
+  }
+  function wireDropzone(dz, input, onFile){
+    dz.addEventListener('click', () => input.click());
+    ['dragenter','dragover'].forEach(evt => dz.addEventListener(evt, e => { e.preventDefault(); dz.classList.add('dragover'); }));
+    ['dragleave','drop'].forEach(evt => dz.addEventListener(evt, e => { e.preventDefault(); dz.classList.remove('dragover'); }));
+    dz.addEventListener('drop', e => {
+      const f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) onFile(f);
+    });
+    input.addEventListener('change', () => { if (input.files[0]) onFile(input.files[0]); });
+  }
+  function baseName(name){ return name.replace(/\.[^.]+$/, ''); }
+
+  async function pageCount(arrayBuffer){
+    const doc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+    return doc.getPageCount();
+  }
+
+  /* ==================================================================
+     SPLIT
+  ================================================================== */
+  (function(){
+    const dz = document.getElementById('split-dz'), input = document.getElementById('split-file');
+    const ticket = document.getElementById('split-ticket'), nameEl = document.getElementById('split-name'), metaEl = document.getElementById('split-meta');
+    const opts = document.getElementById('split-opts'), goBtn = document.getElementById('split-go'), statusEl = document.getElementById('split-status');
+    const rangesWrap = document.getElementById('split-ranges-wrap'), rangesInput = document.getElementById('split-ranges');
+    let file = null, buf = null, numPages = 0, mode = 'each';
+
+    document.querySelectorAll('[data-splitmode]').forEach(chip => {
+      chip.addEventListener('click', () => {
+        document.querySelectorAll('[data-splitmode]').forEach(c => c.classList.remove('on'));
+        chip.classList.add('on');
+        mode = chip.dataset.splitmode;
+        rangesWrap.classList.toggle('hidden', mode !== 'ranges');
+      });
+    });
+
+    wireDropzone(dz, input, async (f) => {
+      file = f; buf = await readArrayBuffer(f);
+      try { numPages = await pageCount(buf); }
+      catch(e){ setStatus(statusEl,'Could not read this PDF — it may be encrypted or corrupt.','err'); return; }
+      nameEl.textContent = f.name;
+      metaEl.textContent = humanSize(f.size) + ' · ' + numPages + ' page' + (numPages===1?'':'s');
+      ticket.classList.remove('hidden'); opts.classList.remove('hidden'); goBtn.classList.remove('hidden');
+      statusEl.classList.add('hidden');
+    });
+    document.getElementById('split-clear').addEventListener('click', () => {
+      file = null; buf = null; ticket.classList.add('hidden'); opts.classList.add('hidden'); goBtn.classList.add('hidden'); input.value='';
+    });
+
+    function parseRanges(str, max){
+      const out = [];
+      str.split(',').forEach(part => {
+        part = part.trim(); if(!part) return;
+        const m = part.match(/^(\d+)\s*-\s*(\d+)$/);
+        if (m) {
+          let a = Math.max(1, parseInt(m[1])), b = Math.min(max, parseInt(m[2]));
+          if (a<=b) out.push({ from:a, to:b });
+        } else {
+          const n = parseInt(part);
+          if (n>=1 && n<=max) out.push({ from:n, to:n });
+        }
+      });
+      return out;
+    }
+
+    goBtn.addEventListener('click', async () => {
+      setStatus(statusEl, 'Splitting…', 'busy');
+      goBtn.disabled = true;
+      try {
+        const zip = new JSZip();
+        if (mode === 'each') {
+          for (let i=0;i<numPages;i++){
+            const src = await PDFDocument.load(buf, { ignoreEncryption:true });
+            const out = await PDFDocument.create();
+            const [p] = await out.copyPages(src, [i]);
+            out.addPage(p);
+            const bytes = await out.save();
+            zip.file(baseName(file.name) + '_page' + (i+1) + '.pdf', bytes);
+          }
+        } else {
+          const ranges = parseRanges(rangesInput.value, numPages);
+          if (!ranges.length) throw new Error('No valid ranges entered.');
+          let idx = 1;
+          for (const r of ranges) {
+            const src = await PDFDocument.load(buf, { ignoreEncryption:true });
+            const out = await PDFDocument.create();
+            const indices = []; for (let i=r.from;i<=r.to;i++) indices.push(i-1);
+            const pages = await out.copyPages(src, indices);
+            pages.forEach(p => out.addPage(p));
+            const bytes = await out.save();
+            zip.file(baseName(file.name) + '_' + r.from + '-' + r.to + '.pdf', bytes);
+            idx++;
+          }
+        }
+        const blob = await zip.generateAsync({ type:'blob' });
+        downloadBlob(blob, baseName(file.name) + '_split.zip');
+        setStatus(statusEl, 'Done — zip downloaded.', 'ok');
+      } catch(e){
+        setStatus(statusEl, 'Split failed: ' + e.message, 'err');
+      }
+      goBtn.disabled = false;
+    });
+  })();
+
+  /* ==================================================================
+     COMPRESS
+  ================================================================== */
+  (function(){
+    const dz = document.getElementById('compress-dz'), input = document.getElementById('compress-file');
+    const ticket = document.getElementById('compress-ticket'), nameEl = document.getElementById('compress-name'), metaEl = document.getElementById('compress-meta');
+    const goBtn = document.getElementById('compress-go'), statusEl = document.getElementById('compress-status');
+    let file = null, buf = null;
+
+    wireDropzone(dz, input, async (f) => {
+      file = f; buf = await readArrayBuffer(f);
+      nameEl.textContent = f.name;
+      metaEl.textContent = humanSize(f.size);
+      ticket.classList.remove('hidden'); goBtn.classList.remove('hidden'); statusEl.classList.add('hidden');
+    });
+    document.getElementById('compress-clear').addEventListener('click', () => {
+      file=null; buf=null; ticket.classList.add('hidden'); goBtn.classList.add('hidden'); input.value='';
+    });
+
+    goBtn.addEventListener('click', async () => {
+      setStatus(statusEl, 'Compressing…', 'busy'); goBtn.disabled = true;
+      try {
+        const doc = await PDFDocument.load(buf, { ignoreEncryption:true, updateMetadata:false });
+        doc.setTitle(''); doc.setAuthor(''); doc.setSubject(''); doc.setKeywords([]); doc.setProducer(''); doc.setCreator('');
+        const bytes = await doc.save({ useObjectStreams:true, addDefaultPage:false });
+        const pct = Math.round((1 - bytes.length/buf.byteLength) * 100);
+        downloadBlob(new Blob([bytes], {type:'application/pdf'}), baseName(file.name) + '_compressed.pdf');
+        if (pct > 0) setStatus(statusEl, 'Done — ' + humanSize(buf.byteLength) + ' → ' + humanSize(bytes.length) + ' (' + pct + '% smaller).', 'ok');
+        else setStatus(statusEl, 'Done — ' + humanSize(bytes.length) + '. This PDF was already tightly packed, so the size barely changed.', 'ok');
+      } catch(e){
+        setStatus(statusEl, 'Compression failed: ' + e.message, 'err');
+      }
+      goBtn.disabled = false;
+    });
+  })();
+
+  /* ==================================================================
+     WATERMARK
+  ================================================================== */
+  (function(){
+    const dz = document.getElementById('watermark-dz'), input = document.getElementById('watermark-file');
+    const ticket = document.getElementById('watermark-ticket'), nameEl = document.getElementById('watermark-name'), metaEl = document.getElementById('watermark-meta');
+    const opts = document.getElementById('watermark-opts'), goBtn = document.getElementById('watermark-go'), statusEl = document.getElementById('watermark-status');
+    const opRange = document.getElementById('watermark-opacity'), sizeRange = document.getElementById('watermark-size');
+    let file=null, buf=null, color='#dc2626';
+
+    opRange.addEventListener('input', () => document.getElementById('wm-op-val').textContent = opRange.value);
+    sizeRange.addEventListener('input', () => document.getElementById('wm-size-val').textContent = sizeRange.value);
+    document.querySelectorAll('[data-wmcolor]').forEach(chip => {
+      chip.addEventListener('click', () => {
+        document.querySelectorAll('[data-wmcolor]').forEach(c=>c.classList.remove('on'));
+        chip.classList.add('on'); color = chip.dataset.wmcolor;
+      });
+    });
+
+    wireDropzone(dz, input, async (f) => {
+      file=f; buf = await readArrayBuffer(f);
+      nameEl.textContent=f.name; metaEl.textContent=humanSize(f.size);
+      ticket.classList.remove('hidden'); opts.classList.remove('hidden'); goBtn.classList.remove('hidden'); statusEl.classList.add('hidden');
+    });
+    document.getElementById('watermark-clear').addEventListener('click', () => {
+      file=null; buf=null; ticket.classList.add('hidden'); opts.classList.add('hidden'); goBtn.classList.add('hidden'); input.value='';
+    });
+
+    function hexToRgb01(hex){
+      const n = parseInt(hex.slice(1),16);
+      return rgb(((n>>16)&255)/255, ((n>>8)&255)/255, (n&255)/255);
+    }
+
+    goBtn.addEventListener('click', async () => {
+      setStatus(statusEl, 'Applying watermark…', 'busy'); goBtn.disabled = true;
+      try {
+        const doc = await PDFDocument.load(buf, { ignoreEncryption:true });
+        const font = await doc.embedFont(StandardFonts.HelveticaBold);
+        const text = document.getElementById('watermark-text').value || 'DRAFT';
+        const size = parseInt(sizeRange.value,10);
+        const opacity = parseInt(opRange.value,10)/100;
+        const col = hexToRgb01(color);
+        const rad = Math.PI/4;
+        doc.getPages().forEach(page => {
+          const { width, height } = page.getSize();
+          const tw = font.widthOfTextAtSize(text, size);
+          const cx = width/2, cy = height/2;
+          const x = cx - (tw/2)*Math.cos(rad);
+          const y = cy - (tw/2)*Math.sin(rad);
+          page.drawText(text, { x, y, size, font, color: col, opacity, rotate: degrees(45) });
+        });
+        const bytes = await doc.save();
+        downloadBlob(new Blob([bytes],{type:'application/pdf'}), baseName(file.name) + '_watermarked.pdf');
+        setStatus(statusEl, 'Done — watermark applied to all pages.', 'ok');
+      } catch(e){
+        setStatus(statusEl, 'Watermark failed: ' + e.message, 'err');
+      }
+      goBtn.disabled = false;
+    });
+  })();
+
+  /* ==================================================================
+     SIGN
+  ================================================================== */
+  (function(){
+    const dz = document.getElementById('sign-dz'), input = document.getElementById('sign-file');
+    const ticket = document.getElementById('sign-ticket'), nameEl = document.getElementById('sign-name'), metaEl = document.getElementById('sign-meta');
+    const body = document.getElementById('sign-body'), goBtn = document.getElementById('sign-go'), statusEl = document.getElementById('sign-status');
+    const pageSel = document.getElementById('sign-page');
+    const placeCanvas = document.getElementById('sign-place-canvas'), previewBox = document.getElementById('sig-preview');
+    const sigPad = document.getElementById('sigPad');
+    let file=null, buf=null, numPages=0, pdfjsDoc=null;
+    let sigDrawing=false, sigHasInk=false, placedPt=null, placeScale=1;
+
+    // signature pad
+    const sctx = sigPad.getContext('2d');
+    function resizeSigPad(){
+      const rect = sigPad.getBoundingClientRect();
+      sigPad.width = rect.width * 2; sigPad.height = rect.height * 2;
+      sctx.scale(2,2); sctx.lineWidth = 2.4; sctx.lineCap='round'; sctx.strokeStyle = '#0f1e33';
+    }
+    setTimeout(resizeSigPad, 50);
+    function posFromEvent(e, el){
+      const rect = el.getBoundingClientRect();
+      const cx = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+      const cy = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+      return { x: cx, y: cy };
+    }
+    sigPad.addEventListener('pointerdown', e => { sigDrawing=true; sigHasInk=true; const p=posFromEvent(e,sigPad); sctx.beginPath(); sctx.moveTo(p.x,p.y); });
+    sigPad.addEventListener('pointermove', e => { if(!sigDrawing) return; const p=posFromEvent(e,sigPad); sctx.lineTo(p.x,p.y); sctx.stroke(); });
+    window.addEventListener('pointerup', () => sigDrawing=false);
+    document.getElementById('sig-clear').addEventListener('click', () => {
+      sctx.clearRect(0,0,sigPad.width,sigPad.height); sigHasInk=false;
+    });
+
+    wireDropzone(dz, input, async (f) => {
+      file=f; buf = await readArrayBuffer(f);
+      try {
+        numPages = await pageCount(buf);
+        pdfjsDoc = await pdfjsLib.getDocument({ data: buf.slice(0) }).promise;
+      } catch(e){ setStatus(statusEl, 'Could not read this PDF.', 'err'); return; }
+      nameEl.textContent=f.name; metaEl.textContent = humanSize(f.size) + ' · ' + numPages + ' page' + (numPages===1?'':'s');
+      pageSel.innerHTML=''; for (let i=1;i<=numPages;i++){ const o=document.createElement('option'); o.value=i; o.textContent='Page '+i; pageSel.appendChild(o); }
+      ticket.classList.remove('hidden'); body.classList.remove('hidden'); goBtn.classList.remove('hidden'); statusEl.classList.add('hidden');
+      renderPlacePage();
+    });
+    document.getElementById('sign-clear').addEventListener('click', () => {
+      file=null; buf=null; ticket.classList.add('hidden'); body.classList.add('hidden'); goBtn.classList.add('hidden'); input.value=''; placedPt=null; previewBox.classList.add('hidden');
+    });
+    pageSel.addEventListener('change', renderPlacePage);
+
+    async function renderPlacePage(){
+      const pageNum = parseInt(pageSel.value || '1',10);
+      const page = await pdfjsDoc.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 1 });
+      const maxW = 560;
+      const scale = Math.min(1.4, maxW / viewport.width);
+      const vp = page.getViewport({ scale });
+      placeCanvas.width = vp.width; placeCanvas.height = vp.height;
+      placeScale = scale;
+      const ctx = placeCanvas.getContext('2d');
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      placedPt = null; previewBox.classList.add('hidden');
+    }
+
+    placeCanvas.addEventListener('click', (e) => {
+      const rect = placeCanvas.getBoundingClientRect();
+      const scaleX = placeCanvas.width / rect.width, scaleY = placeCanvas.height / rect.height;
+      const cx = (e.clientX - rect.left) * scaleX;
+      const cy = (e.clientY - rect.top) * scaleY;
+      placedPt = { xCanvas: cx, yCanvas: cy };
+      const boxW = 130, boxH = 50;
+      previewBox.style.left = ((e.clientX - rect.left) - boxW/2) + 'px';
+      previewBox.style.top = ((e.clientY - rect.top) - boxH/2) + 'px';
+      previewBox.style.width = boxW + 'px'; previewBox.style.height = boxH + 'px';
+      previewBox.classList.remove('hidden');
+    });
+
+    goBtn.addEventListener('click', async () => {
+      if (!sigHasInk) { setStatus(statusEl, 'Draw a signature first.', 'err'); return; }
+      if (!placedPt) { setStatus(statusEl, 'Click on the page preview to place your signature.', 'err'); return; }
+      setStatus(statusEl, 'Embedding signature…', 'busy'); goBtn.disabled = true;
+      try {
+        const sigDataUrl = sigPad.toDataURL('image/png');
+        const doc = await PDFDocument.load(buf, { ignoreEncryption:true });
+        const pageNum = parseInt(pageSel.value,10);
+        const page = doc.getPages()[pageNum-1];
+        const { width: pw, height: ph } = page.getSize();
+        const pngBytes = await (await fetch(sigDataUrl)).arrayBuffer();
+        const png = await doc.embedPng(pngBytes);
+        const sigW = 130, sigH = sigW * (png.height/png.width);
+        // convert canvas coords -> pdf coords
+        const xPdf = (placedPt.xCanvas / placeScale) - sigW/2;
+        const yPdf = ph - (placedPt.yCanvas / placeScale) - sigH/2;
+        page.drawImage(png, { x: xPdf, y: yPdf, width: sigW, height: sigH });
+        const bytes = await doc.save();
+        downloadBlob(new Blob([bytes],{type:'application/pdf'}), baseName(file.name) + '_signed.pdf');
+        setStatus(statusEl, 'Done — signature placed on page ' + pageNum + '.', 'ok');
+      } catch(e){
+        setStatus(statusEl, 'Signing failed: ' + e.message, 'err');
+      }
+      goBtn.disabled = false;
+    });
+  })();
+
+  /* ==================================================================
+     PAGE NUMBERS
+  ================================================================== */
+  (function(){
+    const dz = document.getElementById('pagenum-dz'), input = document.getElementById('pagenum-file');
+    const ticket = document.getElementById('pagenum-ticket'), nameEl = document.getElementById('pagenum-name'), metaEl = document.getElementById('pagenum-meta');
+    const opts = document.getElementById('pagenum-opts'), goBtn = document.getElementById('pagenum-go'), statusEl = document.getElementById('pagenum-status');
+    let file=null, buf=null, pos='bc';
+
+    document.querySelectorAll('[data-pos]').forEach(chip => {
+      chip.addEventListener('click', () => {
+        document.querySelectorAll('[data-pos]').forEach(c=>c.classList.remove('on'));
+        chip.classList.add('on'); pos = chip.dataset.pos;
+      });
+    });
+
+    wireDropzone(dz, input, async (f) => {
+      file=f; buf = await readArrayBuffer(f);
+      nameEl.textContent=f.name; metaEl.textContent=humanSize(f.size);
+      ticket.classList.remove('hidden'); opts.classList.remove('hidden'); goBtn.classList.remove('hidden'); statusEl.classList.add('hidden');
+    });
+    document.getElementById('pagenum-clear').addEventListener('click', () => {
+      file=null; buf=null; ticket.classList.add('hidden'); opts.classList.add('hidden'); goBtn.classList.add('hidden'); input.value='';
+    });
+
+    goBtn.addEventListener('click', async () => {
+      setStatus(statusEl, 'Numbering pages…', 'busy'); goBtn.disabled=true;
+      try {
+        const doc = await PDFDocument.load(buf, { ignoreEncryption:true });
+        const font = await doc.embedFont(StandardFonts.Helvetica);
+        const fmt = document.getElementById('pagenum-format').value;
+        const start = parseInt(document.getElementById('pagenum-start').value || '1',10);
+        const pages = doc.getPages();
+        const N = pages.length;
+        pages.forEach((page, i) => {
+          const n = start + i;
+          let label = fmt==='n' ? String(n) : fmt==='n-of-N' ? (n + ' of ' + (start + N - 1)) : ('Page ' + n);
+          const { width, height } = page.getSize();
+          const size = 10;
+          const tw = font.widthOfTextAtSize(label, size);
+          let x, y;
+          const margin = 24;
+          if (pos==='bl'){ x = margin; y = margin; }
+          else if (pos==='br'){ x = width - margin - tw; y = margin; }
+          else if (pos==='tc'){ x = width/2 - tw/2; y = height - margin; }
+          else { x = width/2 - tw/2; y = margin; }
+          page.drawText(label, { x, y, size, font, color: rgb(0.06,0.12,0.2) });
+        });
+        const bytes = await doc.save();
+        downloadBlob(new Blob([bytes],{type:'application/pdf'}), baseName(file.name) + '_numbered.pdf');
+        setStatus(statusEl, 'Done — numbers added to ' + N + ' pages.', 'ok');
+      } catch(e){
+        setStatus(statusEl, 'Failed: ' + e.message, 'err');
+      }
+      goBtn.disabled=false;
+    });
+  })();
+
+  /* ==================================================================
+     CROP
+  ================================================================== */
+  (function(){
+    const dz = document.getElementById('crop-dz'), input = document.getElementById('crop-file');
+    const ticket = document.getElementById('crop-ticket'), nameEl = document.getElementById('crop-name'), metaEl = document.getElementById('crop-meta');
+    const body = document.getElementById('crop-body'), goBtn = document.getElementById('crop-go'), statusEl = document.getElementById('crop-status');
+    const canvas = document.getElementById('crop-canvas'), box = document.getElementById('crop-box');
+    const tEl=document.getElementById('crop-top'), bEl=document.getElementById('crop-bottom'), lEl=document.getElementById('crop-left'), rEl=document.getElementById('crop-right');
+    let file=null, buf=null, numPages=0;
+
+    wireDropzone(dz, input, async (f) => {
+      file=f; buf = await readArrayBuffer(f);
+      try {
+        const pdfjsDoc = await pdfjsLib.getDocument({ data: buf.slice(0) }).promise;
+        numPages = pdfjsDoc.numPages;
+        const page = await pdfjsDoc.getPage(1);
+        const viewport = page.getViewport({ scale: 1 });
+        const scale = Math.min(1.3, 560/viewport.width);
+        const vp = page.getViewport({ scale });
+        canvas.width = vp.width; canvas.height = vp.height;
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+      } catch(e){ setStatus(statusEl, 'Could not read this PDF.', 'err'); return; }
+      nameEl.textContent=f.name; metaEl.textContent=humanSize(f.size)+' · '+numPages+' pages';
+      ticket.classList.remove('hidden'); body.classList.remove('hidden'); goBtn.classList.remove('hidden'); statusEl.classList.add('hidden');
+      updateBox();
+    });
+    document.getElementById('crop-clear').addEventListener('click', () => {
+      file=null; buf=null; ticket.classList.add('hidden'); body.classList.add('hidden'); goBtn.classList.add('hidden'); input.value='';
+    });
+
+    function updateBox(){
+      const t = +tEl.value, b = +bEl.value, l = +lEl.value, r = +rEl.value;
+      document.getElementById('ct').textContent=t; document.getElementById('cb').textContent=b;
+      document.getElementById('cl').textContent=l; document.getElementById('cr').textContent=r;
+      const rect = canvas.getBoundingClientRect();
+      const w = canvas.clientWidth || rect.width, h = canvas.clientHeight || rect.height;
+      box.style.left = (w*l/100) + 'px';
+      box.style.top = (h*t/100) + 'px';
+      box.style.width = (w*(100-l-r)/100) + 'px';
+      box.style.height = (h*(100-t-b)/100) + 'px';
+    }
+    [tEl,bEl,lEl,rEl].forEach(el => el.addEventListener('input', updateBox));
+    window.addEventListener('resize', updateBox);
+
+    goBtn.addEventListener('click', async () => {
+      setStatus(statusEl, 'Cropping…', 'busy'); goBtn.disabled=true;
+      try {
+        const doc = await PDFDocument.load(buf, { ignoreEncryption:true });
+        const t=+tEl.value/100, b=+bEl.value/100, l=+lEl.value/100, r=+rEl.value/100;
+        doc.getPages().forEach(page => {
+          const { width, height } = page.getSize();
+          const x = width*l, y = height*b;
+          const w = width*(1-l-r), h = height*(1-t-b);
+          page.setCropBox(x, y, w, h);
+        });
+        const bytes = await doc.save();
+        downloadBlob(new Blob([bytes],{type:'application/pdf'}), baseName(file.name) + '_cropped.pdf');
+        setStatus(statusEl, 'Done — crop applied to all pages.', 'ok');
+      } catch(e){
+        setStatus(statusEl, 'Crop failed: ' + e.message, 'err');
+      }
+      goBtn.disabled=false;
+    });
+  })();
+
+  /* ==================================================================
+     HTML TO PDF
+  ================================================================== */
+  (function(){
+    const goBtn = document.getElementById('html-go'), statusEl = document.getElementById('html-status');
+    goBtn.addEventListener('click', async () => {
+      setStatus(statusEl, 'Rendering…', 'busy'); goBtn.disabled=true;
+      try {
+        const raw = document.getElementById('html-input').value;
+        const width = parseInt(document.getElementById('html-width').value,10);
+        const looksLikeHtml = /<[a-z][\s\S]*>/i.test(raw);
+        const container = document.createElement('div');
+        container.style.cssText = 'position:fixed;left:-9999px;top:0;width:'+width+'px;background:#fff;padding:24px;font-family:Arial,Helvetica,sans-serif;color:#111;';
+        container.innerHTML = looksLikeHtml ? raw : ('<div style="white-space:pre-wrap;line-height:1.6;">' + raw.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>');
+        document.body.appendChild(container);
+
+        const canvas = await html2canvas(container, { scale: 2, backgroundColor:'#ffffff' });
+        document.body.removeChild(container);
+
+        const sizeName = document.getElementById('html-size').value;
+        const pdf = new jspdf.jsPDF({ unit:'pt', format: sizeName });
+        const pageW = pdf.internal.pageSize.getWidth();
+        const pageH = pdf.internal.pageSize.getHeight();
+        const imgW = pageW;
+        const imgH = canvas.height * (imgW / canvas.width);
+        let heightLeft = imgH, position = 0;
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        pdf.addImage(imgData, 'JPEG', 0, position, imgW, imgH);
+        heightLeft -= pageH;
+        while (heightLeft > 0){
+          position = heightLeft - imgH;
+          pdf.addPage();
+          pdf.addImage(imgData, 'JPEG', 0, position, imgW, imgH);
+          heightLeft -= pageH;
+        }
+        pdf.save('document.pdf');
+        setStatus(statusEl, 'Done — PDF downloaded.', 'ok');
+      } catch(e){
+        setStatus(statusEl, 'Render failed: ' + e.message, 'err');
+      }
+      goBtn.disabled=false;
+    });
+  })();
+
+  /* ==================================================================
+     SCAN TO PDF
+  ================================================================== */
+  (function(){
+    const cameraBtn = document.getElementById('scan-camera-btn'), fileInput = document.getElementById('scan-file');
+    const camWrap = document.getElementById('scan-camera-wrap'), video = document.getElementById('scan-video');
+    const captureBtn = document.getElementById('scan-capture-btn'), stopBtn = document.getElementById('scan-camera-stop');
+    const hiddenCanvas = document.getElementById('scan-hidden-canvas');
+    const thumbs = document.getElementById('scan-thumbs'), hint = document.getElementById('scan-hint');
+    const goBtn = document.getElementById('scan-go'), statusEl = document.getElementById('scan-status');
+    let stream = null, pages = []; // dataURLs
+
+    cameraBtn.addEventListener('click', async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        video.srcObject = stream;
+        camWrap.classList.remove('hidden');
+      } catch(e){
+        setStatus(statusEl, 'Could not access camera: ' + e.message, 'err');
+      }
+    });
+    stopBtn.addEventListener('click', () => {
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      camWrap.classList.add('hidden');
+    });
+    captureBtn.addEventListener('click', () => {
+      hiddenCanvas.width = video.videoWidth; hiddenCanvas.height = video.videoHeight;
+      hiddenCanvas.getContext('2d').drawImage(video, 0, 0);
+      pages.push(hiddenCanvas.toDataURL('image/jpeg', 0.92));
+      renderThumbs();
+    });
+    fileInput.addEventListener('change', () => {
+      Array.from(fileInput.files).forEach(f => {
+        const r = new FileReader();
+        r.onload = () => { pages.push(r.result); renderThumbs(); };
+        r.readAsDataURL(f);
+      });
+    });
+
+    function renderThumbs(){
+      thumbs.innerHTML = '';
+      pages.forEach((src, i) => {
+        const d = document.createElement('div'); d.className='thumb';
+        d.innerHTML = '<img src="'+src+'"><div class="n">'+(i+1)+'</div>';
+        d.addEventListener('click', () => { pages.splice(i,1); renderThumbs(); });
+        thumbs.appendChild(d);
+      });
+      const has = pages.length > 0;
+      thumbs.classList.toggle('hidden', !has);
+      hint.classList.toggle('hidden', !has);
+      goBtn.classList.toggle('hidden', !has);
+    }
+
+    goBtn.addEventListener('click', () => {
+      if (!pages.length) return;
+      setStatus(statusEl, 'Binding…', 'busy'); goBtn.disabled = true;
+      const loadAll = pages.map(src => new Promise(res => { const im = new Image(); im.onload=()=>res(im); im.src = src; }));
+      Promise.all(loadAll).then(images => {
+        const pdf = new jspdf.jsPDF({ unit:'pt' });
+        images.forEach((img, i) => {
+          if (i>0) pdf.addPage();
+          const pageW = pdf.internal.pageSize.getWidth();
+          const pageH = pdf.internal.pageSize.getHeight();
+          const ratio = Math.min(pageW/img.width, pageH/img.height);
+          const w = img.width*ratio, h = img.height*ratio;
+          const x = (pageW-w)/2, y = (pageH-h)/2;
+          pdf.addImage(img, 'JPEG', x, y, w, h);
+        });
+        pdf.save('scanned.pdf');
+        setStatus(statusEl, 'Done — ' + images.length + ' page PDF downloaded.', 'ok');
+        goBtn.disabled = false;
+      }).catch(e => {
+        setStatus(statusEl, 'Failed: ' + e.message, 'err');
+        goBtn.disabled = false;
+      });
+    });
+  })();
+
+  /* ==================================================================
+     REPAIR
+  ================================================================== */
+  (function(){
+    const dz = document.getElementById('repair-dz'), input = document.getElementById('repair-file');
+    const ticket = document.getElementById('repair-ticket'), nameEl = document.getElementById('repair-name'), metaEl = document.getElementById('repair-meta');
+    const goBtn = document.getElementById('repair-go'), statusEl = document.getElementById('repair-status');
+    let file=null, buf=null;
+
+    wireDropzone(dz, input, async (f) => {
+      file=f; buf = await readArrayBuffer(f);
+      nameEl.textContent=f.name; metaEl.textContent=humanSize(f.size);
+      ticket.classList.remove('hidden'); goBtn.classList.remove('hidden'); statusEl.classList.add('hidden');
+    });
+    document.getElementById('repair-clear').addEventListener('click', () => {
+      file=null; buf=null; ticket.classList.add('hidden'); goBtn.classList.add('hidden'); input.value='';
+    });
+
+    goBtn.addEventListener('click', async () => {
+      setStatus(statusEl, 'Attempting a structural repair…', 'busy'); goBtn.disabled=true;
+      try {
+        // Attempt 1: pdf-lib forgiving load + resave
+        const doc = await PDFDocument.load(buf, { ignoreEncryption:true, throwOnInvalidObject:false, updateMetadata:false });
+        const bytes = await doc.save();
+        downloadBlob(new Blob([bytes],{type:'application/pdf'}), baseName(file.name) + '_repaired.pdf');
+        setStatus(statusEl, 'Done — file was rebuilt and re-saved.', 'ok');
+      } catch(e){
+        // Attempt 2: rasterize every page via pdf.js and rebuild fresh PDF
+        try {
+          setStatus(statusEl, 'Structure was too damaged for a direct rebuild — re-rendering pages instead…', 'busy');
+          const pdfjsDoc = await pdfjsLib.getDocument({ data: buf.slice(0), stopAtErrors:false }).promise;
+          const pdf = new jspdf.jsPDF({ unit:'pt' });
+          for (let i=1;i<=pdfjsDoc.numPages;i++){
+            const page = await pdfjsDoc.getPage(i);
+            const viewport = page.getViewport({ scale: 2 });
+            const c = document.createElement('canvas'); c.width=viewport.width; c.height=viewport.height;
+            await page.render({ canvasContext:c.getContext('2d'), viewport }).promise;
+            const imgData = c.toDataURL('image/jpeg', 0.92);
+            const pageW = pdf.internal.pageSize.getWidth(), pageH = pdf.internal.pageSize.getHeight();
+            const ratio = Math.min(pageW/viewport.width, pageH/viewport.height);
+            const w = viewport.width*ratio, h = viewport.height*ratio;
+            if (i>1) pdf.addPage();
+            pdf.addImage(imgData, 'JPEG', (pageW-w)/2, (pageH-h)/2, w, h);
+          }
+          pdf.save(baseName(file.name) + '_repaired.pdf');
+          setStatus(statusEl, 'Done — pages were re-rendered into a fresh PDF (text may now be an image).', 'ok');
+        } catch(e2){
+          setStatus(statusEl, 'This file could not be repaired: ' + e2.message, 'err');
+        }
+      }
+      goBtn.disabled=false;
+    });
+  })();
+
+  /* ==================================================================
+     PDF TO MARKDOWN
+  ================================================================== */
+  (function(){
+    const dz = document.getElementById('md-dz'), input = document.getElementById('md-file');
+    const ticket = document.getElementById('md-ticket'), nameEl = document.getElementById('md-name'), metaEl = document.getElementById('md-meta');
+    const goBtn = document.getElementById('md-go'), statusEl = document.getElementById('md-status');
+    const output = document.getElementById('md-output'), dl = document.getElementById('md-dl');
+    let file=null, buf=null;
+
+    wireDropzone(dz, input, async (f) => {
+      file=f; buf = await readArrayBuffer(f);
+      nameEl.textContent=f.name; metaEl.textContent=humanSize(f.size);
+      ticket.classList.remove('hidden'); goBtn.classList.remove('hidden'); statusEl.classList.add('hidden');
+      output.classList.add('hidden'); dl.classList.add('hidden');
+    });
+    document.getElementById('md-clear').addEventListener('click', () => {
+      file=null; buf=null; ticket.classList.add('hidden'); goBtn.classList.add('hidden'); input.value='';
+      output.classList.add('hidden'); dl.classList.add('hidden');
+    });
+
+    goBtn.addEventListener('click', async () => {
+      setStatus(statusEl, 'Extracting text…', 'busy'); goBtn.disabled=true;
+      try {
+        const pdfjsDoc = await pdfjsLib.getDocument({ data: buf.slice(0) }).promise;
+        const sizes = [];
+        const pagesData = [];
+        for (let i=1;i<=pdfjsDoc.numPages;i++){
+          const page = await pdfjsDoc.getPage(i);
+          const content = await page.getTextContent();
+          const lines = [];
+          let curLine = null, curY = null;
+          content.items.forEach(item => {
+            const fontSize = Math.hypot(item.transform[2], item.transform[3]);
+            sizes.push(fontSize);
+            const y = Math.round(item.transform[5]);
+            if (curLine && Math.abs(y - curY) < 3) {
+              curLine.text += item.str;
+              curLine.size = Math.max(curLine.size, fontSize);
+            } else {
+              if (curLine) lines.push(curLine);
+              curLine = { text: item.str, size: fontSize };
+              curY = y;
+            }
+          });
+          if (curLine) lines.push(curLine);
+          pagesData.push(lines);
+        }
+        sizes.sort((a,b)=>a-b);
+        const bodySize = sizes.length ? sizes[Math.floor(sizes.length*0.5)] : 12;
+
+        let md = '';
+        pagesData.forEach((lines, pi) => {
+          lines.forEach(l => {
+            const t = l.text.trim();
+            if (!t) return;
+            const ratio = l.size / (bodySize || 1);
+            if (ratio >= 1.8) md += '# ' + t + '\n\n';
+            else if (ratio >= 1.4) md += '## ' + t + '\n\n';
+            else if (ratio >= 1.15) md += '### ' + t + '\n\n';
+            else md += t + '\n';
+          });
+          md += '\n';
+        });
+
+        output.value = md.trim() + '\n';
+        output.classList.remove('hidden');
+        const blob = new Blob([output.value], { type:'text/markdown' });
+        dl.href = URL.createObjectURL(blob);
+        dl.download = baseName(file.name) + '.md';
+        dl.classList.remove('hidden');
+        setStatus(statusEl, 'Done — text extracted (headings are a best-effort guess from font size).', 'ok');
+      } catch(e){
+        setStatus(statusEl, 'Conversion failed: ' + e.message, 'err');
+      }
+      goBtn.disabled=false;
+    });
+  })();
+
+})();
+</script>
+</body>
+</html>

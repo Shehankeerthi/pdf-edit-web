@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scanline — Make image PDFs searchable</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#eef2f8;
+    --surface:#ffffff;
+    --surface-2:#f4f7fc;
+    --line:#dbe3f0;
+    --paper:#ffffff;
+    --paper-shadow:#dbe3f0;
+    --ink:#0f1e33;
+    --muted:#64748b;
+    --accent:#2454e0;
+    --accent-dim:#1a41bd;
+    --accent-ink:#ffffff;
+    --blue-deep:#0b2a6b;
+    --danger:#dc2626;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(1200px 600px at 15% -10%, rgba(36,84,224,0.07) 0%, transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(11,42,107,0.05) 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:'Inter', sans-serif;
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:'IBM Plex Mono', monospace;}
+  .wrap{max-width:880px;margin:0 auto;padding:56px 24px 96px;}
+
+  /* ---------- header ---------- */
+  header{display:flex;align-items:center;justify-content:space-between;margin-bottom:48px;}
+  .brand{display:flex;align-items:center;gap:10px;}
+  .brand-mark{
+    width:26px;height:26px;border-radius:3px;
+    background:linear-gradient(180deg, var(--accent), var(--accent-dim));
+    position:relative;flex-shrink:0;
+  }
+  .brand-mark::after{
+    content:"";position:absolute;left:3px;right:3px;top:12px;height:2px;
+    background:var(--accent-ink);opacity:.55;border-radius:1px;
+  }
+  .brand-name{font-family:'IBM Plex Mono',monospace;font-weight:600;letter-spacing:.02em;font-size:15px;}
+  .brand-tag{color:var(--muted);font-size:12px;font-family:'IBM Plex Mono',monospace;}
+
+  /* ---------- hero ---------- */
+  .eyebrow{
+    font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--accent);margin:0 0 14px;
+  }
+  h1{
+    font-family:'Space Grotesk',sans-serif;font-weight:600;
+    font-size:clamp(28px,4.4vw,42px);line-height:1.12;letter-spacing:-.01em;
+    margin:0 0 16px;color:var(--blue-deep,#0b2a6b);
+  }
+  h1 em{font-style:normal;color:var(--accent);}
+  .lede{color:var(--muted);font-size:16px;line-height:1.6;max-width:56ch;margin:0 0 40px;}
+
+  /* ---------- scan document graphic ---------- */
+  .doc-stage{
+    position:relative;height:150px;margin:0 0 36px;
+    display:flex;align-items:center;gap:14px;
+  }
+  .doc{
+    width:96px;height:126px;background:var(--paper);border-radius:2px;
+    position:relative;overflow:hidden;flex-shrink:0;
+    box-shadow:0 10px 24px -8px rgba(15,30,51,.18), 0 0 0 1px var(--paper-shadow) inset;
+  }
+  .doc .rule{position:absolute;left:12px;right:12px;height:3px;background:#00000014;border-radius:2px;}
+  .doc .rule.short{right:32px;}
+  .doc-stage.idle .doc:nth-child(1) .rule:nth-child(1){top:20px;}
+  .doc .rule:nth-child(2){top:36px;}
+  .doc .rule:nth-child(3){top:52px;}
+  .doc .rule:nth-child(4){top:68px;}
+  .doc .rule:nth-child(5){top:84px;}
+  .doc.d2{transform:translateY(8px) rotate(-3deg);opacity:.55;}
+  .doc.d3{transform:translateY(14px) rotate(3deg);opacity:.3;}
+  .scan-line{
+    position:absolute;left:0;right:0;height:14px;top:0;
+    background:linear-gradient(180deg, transparent, rgba(36,84,224,.55), var(--accent), rgba(36,84,224,.55), transparent);
+    box-shadow:0 0 16px 2px rgba(36,84,224,.5);
+    animation:sweep 2.6s ease-in-out infinite;
+  }
+  @keyframes sweep{
+    0%{top:-14px;}
+    50%{top:120px;}
+    100%{top:-14px;}
+  }
+  .stage-caption{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
+  .stage-caption b{color:var(--ink);font-weight:500;}
+
+  /* ---------- dropzone ---------- */
+  .dropzone{
+    border:1.5px dashed var(--line);border-radius:10px;background:var(--surface);
+    padding:36px 24px;text-align:center;cursor:pointer;transition:border-color .15s, background .15s;
+  }
+  .dropzone:hover, .dropzone.drag{border-color:var(--accent);background:var(--surface-2);}
+  .dropzone svg{margin-bottom:10px;}
+  .dropzone .dz-title{font-size:15px;font-weight:500;margin:0 0 4px;}
+  .dropzone .dz-sub{color:var(--muted);font-size:13px;margin:0;}
+  .dropzone input{display:none;}
+  .privacy-note{
+    display:flex;align-items:center;gap:8px;margin-top:16px;color:var(--muted);
+    font-size:12.5px;font-family:'IBM Plex Mono',monospace;
+  }
+  .privacy-note .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0;}
+
+  /* ---------- settings row ---------- */
+  .settings{display:flex;gap:24px;margin-top:20px;flex-wrap:wrap;}
+  .setting{display:flex;flex-direction:column;gap:6px;}
+  .setting label{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;}
+  .setting select{
+    background:var(--surface-2);border:1px solid var(--line);color:var(--ink);
+    padding:8px 10px;border-radius:6px;font-family:'Inter',sans-serif;font-size:13.5px;
+  }
+
+  /* ---------- processing card ---------- */
+  .card{
+    background:var(--surface);border:1px solid var(--line);border-radius:10px;
+    padding:28px;margin-top:28px;
+  }
+  .proc-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:18px;}
+  .proc-head .fname{font-size:14.5px;font-weight:500;}
+  .proc-head .fname .ext{color:var(--muted);font-family:'IBM Plex Mono',monospace;}
+  .proc-status{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--accent);}
+
+  .proc-body{display:flex;gap:20px;align-items:center;}
+  .thumb-wrap{
+    width:74px;height:98px;border-radius:3px;background:var(--paper);position:relative;
+    overflow:hidden;flex-shrink:0;box-shadow:0 6px 16px -6px rgba(15,30,51,.22);
+  }
+  .thumb-wrap canvas, .thumb-wrap img{width:100%;height:100%;object-fit:cover;display:block;}
+  .thumb-wrap .scan-line{height:10px;}
+
+  .progress-col{flex:1;min-width:0;}
+  .bar-track{height:6px;border-radius:4px;background:var(--surface-2);overflow:hidden;border:1px solid var(--line);}
+  .bar-fill{height:100%;width:0%;background:linear-gradient(90deg, var(--accent-dim), var(--accent));transition:width .25s ease;}
+  .progress-meta{display:flex;justify-content:space-between;margin-top:8px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
+  .progress-meta b{color:var(--ink);font-weight:500;}
+
+  .log{
+    margin-top:18px;padding-top:16px;border-top:1px solid var(--line);
+    font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);
+    max-height:120px;overflow-y:auto;
+  }
+  .log div{padding:2px 0;}
+  .log div.now{color:var(--accent);}
+
+  /* ---------- result ---------- */
+  .result-head{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
+  .result-head .check{
+    width:20px;height:20px;border-radius:50%;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  .result-head .check svg{width:11px;height:11px;}
+  .result-head h2{font-family:'IBM Plex Mono',monospace;font-size:17px;margin:0;font-weight:600;}
+  .result-sub{color:var(--muted);font-size:13.5px;margin:0 0 22px;}
+
+  .downloads{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:22px;}
+  .btn{
+    font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:500;
+    padding:11px 18px;border-radius:7px;text-decoration:none;display:inline-flex;
+    align-items:center;gap:8px;cursor:pointer;border:1px solid transparent;
+  }
+  .btn-primary{background:var(--accent);color:var(--accent-ink);}
+  .btn-primary:hover{background:var(--accent-dim);}
+  .btn-secondary{background:transparent;border-color:var(--line);color:var(--ink);}
+  .btn-secondary:hover{border-color:var(--accent);color:var(--accent);}
+  .btn-ghost{background:transparent;color:var(--muted);border:none;font-size:12.5px;padding:8px 4px;}
+  .btn-ghost:hover{color:var(--ink);}
+
+  .text-preview{
+    background:var(--surface-2);border:1px solid var(--line);border-radius:8px;
+    padding:16px 18px;max-height:260px;overflow-y:auto;
+    font-family:'IBM Plex Mono',monospace;font-size:12.5px;line-height:1.65;
+    color:#334155;white-space:pre-wrap;word-break:break-word;
+  }
+  .text-preview .pg{color:var(--accent);display:block;margin:12px 0 4px;font-weight:600;}
+  .text-preview .pg:first-child{margin-top:0;}
+
+  .error-box{
+    background:#fdecea;border:1px solid #f3b4b0;color:#b91c1c;border-radius:8px;
+    padding:16px 18px;font-size:13.5px;margin-top:20px;font-family:'IBM Plex Mono',monospace;
+  }
+
+  footer{margin-top:64px;color:var(--muted);font-size:12px;font-family:'IBM Plex Mono',monospace;text-align:center;}
+  a.inline{color:var(--accent);text-decoration:none;}
+
+  .hidden{display:none !important;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px;}
+</style>
+</head>
+<body>
+
+<a href="index.html" style="position:fixed;top:16px;left:16px;z-index:999;display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.04em;color:#64748b;text-decoration:none;background:#ffffff;border:1px solid #dbe3f0;padding:7px 12px;border-radius:3px;">&larr; The Bindery</a>
+
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div>
+        <div class="brand-name">SCANLINE</div>
+        <div class="brand-tag">image-pdf → searchable-pdf</div>
+      </div>
+    </div>
+    <div class="brand-tag">runs entirely in your browser</div>
+  </header>
+
+  <p class="eyebrow">OCR, client-side</p>
+  <h1>Turn a PDF of <em>page photos</em><br>into a PDF you can search.</h1>
+  <p class="lede">Drop in a PDF made of scanned pages or images. Scanline reads each page, recognizes the text on it, and hands back a new PDF with an invisible, selectable text layer sitting exactly over the original page — plus a plain‑text copy of everything it found.</p>
+
+  <div class="doc-stage idle" id="heroStage">
+    <div class="doc d3"></div>
+    <div class="doc d2"></div>
+    <div class="doc" style="display:flex;flex-direction:column;">
+      <div class="rule"></div><div class="rule"></div><div class="rule"></div><div class="rule short"></div>
+      <div class="scan-line"></div>
+    </div>
+    <div class="stage-caption">Ready when you are — <b>select a PDF below</b> to start the scan.</div>
+  </div>
+
+  <div class="dropzone" id="dropzone">
+    <input type="file" id="fileInput" accept="application/pdf">
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" style="margin:0 auto;display:block;">
+      <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="#2454e0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <p class="dz-title">Drop a PDF here, or click to choose one</p>
+    <p class="dz-sub">Works best with scanned pages, photographed documents, or image-only PDFs</p>
+  </div>
+
+  <div class="settings">
+    <div class="setting">
+      <label>OCR language</label>
+      <select id="langSelect">
+        <option value="eng">English</option>
+        <option value="spa">Spanish</option>
+        <option value="fra">French</option>
+        <option value="deu">German</option>
+        <option value="por">Portuguese</option>
+        <option value="ita">Italian</option>
+        <option value="nld">Dutch</option>
+        <option value="chi_sim">Chinese (Simplified)</option>
+        <option value="jpn">Japanese</option>
+        <option value="ara">Arabic</option>
+        <option value="hin">Hindi</option>
+        <option value="sin">Sinhala</option>
+      </select>
+    </div>
+    <div class="setting">
+      <label>Scan quality</label>
+      <select id="qualitySelect">
+        <option value="2">Standard (faster)</option>
+        <option value="3" selected>High (recommended)</option>
+        <option value="4">Maximum (slow, dense text)</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="privacy-note"><span class="dot"></span> Your file is never uploaded anywhere — every step happens on this device.</div>
+
+  <!-- Processing card -->
+  <div class="card hidden" id="procCard">
+    <div class="proc-head">
+      <div class="fname" id="procFileName">document<span class="ext">.pdf</span></div>
+      <div class="proc-status" id="procStatus">starting…</div>
+    </div>
+    <div class="proc-body">
+      <div class="thumb-wrap" id="thumbWrap"><div class="scan-line"></div></div>
+      <div class="progress-col">
+        <div class="bar-track"><div class="bar-fill" id="barFill"></div></div>
+        <div class="progress-meta">
+          <span>Page <b id="pageNow">0</b> of <b id="pageTotal">0</b></span>
+          <span id="pctLabel">0%</span>
+        </div>
+      </div>
+    </div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <!-- Error -->
+  <div class="error-box hidden" id="errorBox"></div>
+
+  <!-- Result card -->
+  <div class="card hidden" id="resultCard">
+    <div class="result-head">
+      <div class="check"><svg viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <h2>Text layer ready</h2>
+    </div>
+    <p class="result-sub" id="resultSub">Every page kept its original look — the text underneath is now searchable, selectable, and copyable.</p>
+    <div class="downloads">
+      <a class="btn btn-primary" id="downloadPdf" download>⬇ Download searchable PDF</a>
+      <a class="btn btn-secondary" id="downloadTxt" download>⬇ Download extracted text (.txt)</a>
+      <button class="btn btn-ghost" id="resetBtn">Start over →</button>
+    </div>
+    <div class="text-preview" id="textPreview"></div>
+  </div>
+
+  <footer>Built for quick, private OCR — pages never leave your device. No accounts, no uploads.</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://unpkg.com/tesseract.js@5.0.2/dist/tesseract.min.js"></script>
+<script>
+(function(){
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const heroStage = document.getElementById('heroStage');
+  const procCard = document.getElementById('procCard');
+  const procFileName = document.getElementById('procFileName');
+  const procStatus = document.getElementById('procStatus');
+  const thumbWrap = document.getElementById('thumbWrap');
+  const barFill = document.getElementById('barFill');
+  const pageNow = document.getElementById('pageNow');
+  const pageTotal = document.getElementById('pageTotal');
+  const pctLabel = document.getElementById('pctLabel');
+  const logEl = document.getElementById('log');
+  const errorBox = document.getElementById('errorBox');
+  const resultCard = document.getElementById('resultCard');
+  const resultSub = document.getElementById('resultSub');
+  const downloadPdf = document.getElementById('downloadPdf');
+  const downloadTxt = document.getElementById('downloadTxt');
+  const resetBtn = document.getElementById('resetBtn');
+  const textPreview = document.getElementById('textPreview');
+  const langSelect = document.getElementById('langSelect');
+  const qualitySelect = document.getElementById('qualitySelect');
+
+  let working = false;
+
+  dropzone.addEventListener('click', () => { if(!working) fileInput.click(); });
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('drag');
+    if (working) return;
+    const f = e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  });
+  fileInput.addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (f) handleFile(f);
+  });
+  resetBtn.addEventListener('click', () => {
+    resultCard.classList.add('hidden');
+    errorBox.classList.add('hidden');
+    fileInput.value = '';
+    heroStage.classList.remove('hidden');
+  });
+
+  function log(msg, isNow){
+    const line = document.createElement('div');
+    if (isNow) {
+      const prev = logEl.querySelector('.now');
+      if (prev) prev.classList.remove('now');
+      line.classList.add('now');
+    }
+    line.textContent = msg;
+    logEl.appendChild(line);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function setProgress(pageIndex, total, subFrac, statusText){
+    pageNow.textContent = pageIndex;
+    pageTotal.textContent = total;
+    const overall = ((pageIndex - 1) + subFrac) / total;
+    const pct = Math.min(100, Math.max(0, Math.round(overall * 100)));
+    barFill.style.width = pct + '%';
+    pctLabel.textContent = pct + '%';
+    if (statusText) procStatus.textContent = statusText;
+  }
+
+  async function handleFile(file){
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      showError('That doesn\'t look like a PDF. Please choose a .pdf file.');
+      return;
+    }
+    working = true;
+    heroStage.classList.add('hidden');
+    resultCard.classList.add('hidden');
+    errorBox.classList.add('hidden');
+    procCard.classList.remove('hidden');
+    logEl.innerHTML = '';
+    barFill.style.width = '0%';
+    procFileName.innerHTML = escapeHtml(baseName(file.name)) + '<span class="ext">.pdf</span>';
+    procStatus.textContent = 'loading…';
+    thumbWrap.innerHTML = '<div class="scan-line"></div>';
+
+    const lang = langSelect.value;
+    const renderScale = parseFloat(qualitySelect.value);
+
+    try {
+      const buf = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+      const numPages = pdf.numPages;
+      pageTotal.textContent = numPages;
+      log('Loaded PDF — ' + numPages + ' page' + (numPages === 1 ? '' : 's') + ' found.');
+
+      log('Starting OCR engine (' + lang + ')…', true);
+      const worker = await Tesseract.createWorker(lang);
+
+      let jsPdfDoc = null;
+      let fullText = [];
+
+      for (let i = 1; i <= numPages; i++) {
+        setProgress(i, numPages, 0, 'rendering page ' + i + '…');
+        log('Page ' + i + ' — rendering to image…', true);
+
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: renderScale });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        const ctx = canvas.getContext('2d');
+        await page.render({ canvasContext: ctx, viewport }).promise;
+
+        thumbWrap.innerHTML = '';
+        const thumbImg = document.createElement('img');
+        thumbImg.src = canvas.toDataURL('image/jpeg', 0.7);
+        thumbWrap.appendChild(thumbImg);
+        const sweep = document.createElement('div');
+        sweep.className = 'scan-line';
+        thumbWrap.appendChild(sweep);
+
+        setProgress(i, numPages, 0.05, 'reading text on page ' + i + '…');
+        log('Page ' + i + ' — recognizing text…', true);
+
+        const { data } = await worker.recognize(canvas, {}, { blocks: true });
+
+        setProgress(i, numPages, 0.85, 'placing text layer for page ' + i + '…');
+
+        const pageViewport1 = page.getViewport({ scale: 1 }); // 1 unit == 1 pdf point
+        const wPt = pageViewport1.width;
+        const hPt = pageViewport1.height;
+        const orientation = wPt > hPt ? 'landscape' : 'portrait';
+
+        if (!jsPdfDoc) {
+          jsPdfDoc = new jspdf.jsPDF({ unit: 'pt', format: [wPt, hPt], orientation });
+        } else {
+          jsPdfDoc.addPage([wPt, hPt], orientation);
+        }
+
+        const imgData = canvas.toDataURL('image/jpeg', 0.82);
+        jsPdfDoc.addImage(imgData, 'JPEG', 0, 0, wPt, hPt);
+
+        const words = extractWords(data);
+        log('Page ' + i + ' — placing ' + words.length + ' word' + (words.length === 1 ? '' : 's') + ' into the text layer…', true);
+        for (const w of words) {
+          if (!w.text || !w.text.trim()) continue;
+          const bbox = w.bbox;
+          const x0 = bbox.x0 / renderScale;
+          const y0 = bbox.y0 / renderScale;
+          const y1 = bbox.y1 / renderScale;
+          const heightPt = Math.max(4, y1 - y0);
+          jsPdfDoc.setFontSize(heightPt);
+          try {
+            jsPdfDoc.text(w.text, x0, y1, { renderingMode: 'invisible' });
+          } catch (e) { /* skip a word that fails to place */ }
+        }
+
+        fullText.push({ page: i, text: (data && data.text) ? data.text.trim() : '' });
+        setProgress(i, numPages, 1, 'page ' + i + ' complete');
+        log('Page ' + i + ' — done.', true);
+      }
+
+      await worker.terminate();
+
+      procStatus.textContent = 'finalizing…';
+      log('Assembling final PDF…', true);
+
+      const pdfBlob = jsPdfDoc.output('blob');
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+      const outBaseName = baseName(file.name) + '-searchable.pdf';
+      downloadPdf.href = pdfUrl;
+      downloadPdf.setAttribute('download', outBaseName);
+
+      const txtContent = fullText.map(p => '----- Page ' + p.page + ' -----\n' + (p.text || '(no text detected)')).join('\n\n');
+      const txtBlob = new Blob([txtContent], { type: 'text/plain' });
+      const txtUrl = URL.createObjectURL(txtBlob);
+      downloadTxt.href = txtUrl;
+      downloadTxt.setAttribute('download', baseName(file.name) + '-extracted.txt');
+
+      textPreview.innerHTML = fullText.map(p =>
+        '<span class="pg">Page ' + p.page + '</span>' + escapeHtml(p.text || '(no text detected on this page)')
+      ).join('');
+
+      resultSub.textContent = numPages + ' page' + (numPages === 1 ? '' : 's') + ' processed — the PDF looks identical, but you can now select, copy, and search its text.';
+      procCard.classList.add('hidden');
+      resultCard.classList.remove('hidden');
+      log('Done.', true);
+    } catch (err) {
+      console.error(err);
+      procCard.classList.add('hidden');
+      showError('Something went wrong while processing this PDF: ' + (err && err.message ? err.message : 'unknown error') + '. Try a smaller file, or a different PDF.');
+    } finally {
+      working = false;
+    }
+  }
+
+  function extractWords(data){
+    // Tesseract.js v5+ nests words under blocks > paragraphs > lines > words
+    // instead of exposing a flat data.words array.
+    const out = [];
+    const blocks = (data && data.blocks) ? data.blocks : [];
+    for (const block of blocks) {
+      const paragraphs = block.paragraphs || [];
+      for (const para of paragraphs) {
+        const lines = para.lines || [];
+        for (const line of lines) {
+          const lineWords = line.words || [];
+          for (const w of lineWords) {
+            if (w && w.text && w.bbox) out.push(w);
+          }
+        }
+      }
+    }
+    return out;
+  }
+
+  function baseName(name){
+    return name.replace(/\.pdf$/i, '');
+  }
+  function escapeHtml(s){
+    return (s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function showError(msg){
+    errorBox.textContent = msg;
+    errorBox.classList.remove('hidden');
+    heroStage.classList.remove('hidden');
+  }
+})();
+</script>
+</body>
+</html>
